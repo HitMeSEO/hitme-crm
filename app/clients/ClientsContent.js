@@ -156,7 +156,7 @@ export default function ClientsContent() {
                           fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 3,
                           background: `${s.color}18`, color: s.color,
                         }}>
-                          {s.short}
+                          {s.label}
                         </span>
                       ))}
                     </div>

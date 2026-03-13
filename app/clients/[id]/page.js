@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import AppShell from '@/components/AppShell';
 import { SERVICE_KEYS, STATUS_COLORS, WIKI_SECTIONS, TASK_STATUS_COLORS, TASK_STATUSES, TASK_PRIORITIES, PRIORITY_COLORS, CONTENT_TYPE_COLORS, CONTENT_TYPES, CONTENT_STATUS_COLORS, CONTENT_STATUSES, ACTIVITY_TYPES } from '@/lib/constants';
-import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Trash2, Plus } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Trash2, Plus, Pencil, X } from 'lucide-react';
 
 const TABS = [
   { key: 'overview', label: 'Overview' },
@@ -48,6 +48,16 @@ export default function ClientDetailPage() {
   const refreshActivities = async () => {
     const { data } = await supabase.from('activities').select('*').eq('client_id', id).order('created_at', { ascending: false });
     setActivities(data || []);
+  };
+
+  const refreshWikiLinks = async () => {
+    const { data } = await supabase.from('wiki_links').select('*').eq('client_id', id).order('section').order('sort_order');
+    setWikiLinks(data || []);
+  };
+
+  const refreshClient = async () => {
+    const { data } = await supabase.from('clients').select('*').eq('id', id).single();
+    setClient(data);
   };
 
   const handleDeleteClient = async () => {
@@ -178,35 +188,7 @@ export default function ClientDetailPage() {
       )}
 
       {/* Quick links row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        {client.website && (
-          <a href={client.website} target="_blank" rel="noreferrer" style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-            borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: 'none',
-            background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid rgba(99,102,241,0.3)',
-          }}>
-            <Globe size={12} /> Website
-          </a>
-        )}
-        {looker && (
-          <a href={looker.url} target="_blank" rel="noreferrer" style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-            borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: 'none',
-            background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)',
-          }}>
-            📊 Looker
-          </a>
-        )}
-        {client.phone && (
-          <span style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-            borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)',
-            background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-          }}>
-            <Phone size={12} /> {client.phone}
-          </span>
-        )}
-      </div>
+      <FolderLinksRow client={client} setClient={setClient} clientId={id} looker={looker} supabase={supabase} />
 
       {/* Tab Bar */}
       <div style={{
@@ -249,12 +231,132 @@ export default function ClientDetailPage() {
       {tab === 'overview' && <OverviewTab client={client} locations={locations} contacts={contacts} looker={looker} />}
       {tab === 'locations' && <LocationsTab locations={locations} />}
       {tab === 'contacts' && <ContactsTab contacts={contacts} />}
-      {tab === 'wiki' && <WikiTab wikiLinks={wikiLinks} />}
-      {tab === 'services' && <ServicesTab client={client} />}
+      {tab === 'wiki' && <WikiTab wikiLinks={wikiLinks} clientId={id} refreshWikiLinks={refreshWikiLinks} />}
+      {tab === 'services' && <ServicesTab client={client} setClient={setClient} clientId={id} />}
       {tab === 'tasks' && <TasksTab tasks={tasks} clientId={id} refreshTasks={refreshTasks} />}
-      {tab === 'content' && <ContentTab content={content} clientId={id} refreshContent={refreshContent} />}
+      {tab === 'content' && <ContentTab content={content} client={client} clientId={id} refreshContent={refreshContent} setClient={setClient} />}
       {tab === 'notes' && <NotesTab activities={activities} clientId={id} refreshActivities={refreshActivities} />}
     </AppShell>
+  );
+}
+
+/* ============================================================
+   FOLDER LINKS ROW
+   ============================================================ */
+
+const FOLDER_FIELDS = [
+  { key: 'drive_folder', label: 'Google Drive', icon: '📂', color: '#6366f1' },
+  { key: 'image_folder', label: 'Image Folder', icon: '🖼️', color: '#ec4899' },
+  { key: 'content_folder', label: 'Content Folder', icon: '✍️', color: '#10b981' },
+  { key: 'dropbox_folder', label: 'Dropbox', icon: '📦', color: '#3b82f6' },
+];
+
+function FolderLinksRow({ client, setClient, clientId, looker, supabase }) {
+  const [editingFolder, setEditingFolder] = useState(null);
+  const [folderUrl, setFolderUrl] = useState('');
+
+  const handleSaveFolder = async (e) => {
+    e?.preventDefault();
+    if (!editingFolder) return;
+    const { error } = await supabase.from('clients').update({ [editingFolder]: folderUrl || '' }).eq('id', clientId);
+    if (!error) {
+      setClient({ ...client, [editingFolder]: folderUrl || '' });
+      setEditingFolder(null);
+      setFolderUrl('');
+    }
+  };
+
+  const handleClearFolder = async (field, e) => {
+    e?.stopPropagation();
+    const { error } = await supabase.from('clients').update({ [field]: '' }).eq('id', clientId);
+    if (!error) setClient({ ...client, [field]: '' });
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+      {client.website && (
+        <a href={client.website} target="_blank" rel="noreferrer" style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+          borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: 'none',
+          background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid rgba(99,102,241,0.3)',
+        }}>
+          <Globe size={12} /> Website
+        </a>
+      )}
+      {looker && (
+        <a href={looker.url} target="_blank" rel="noreferrer" style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+          borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: 'none',
+          background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)',
+        }}>
+          📊 Looker
+        </a>
+      )}
+      {FOLDER_FIELDS.map(f => {
+        const url = client[f.key];
+        const isEditing = editingFolder === f.key;
+        if (isEditing) {
+          return (
+            <form key={f.key} onSubmit={handleSaveFolder} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="url"
+                value={folderUrl}
+                onChange={e => setFolderUrl(e.target.value)}
+                placeholder="Paste URL..."
+                autoFocus
+                style={{
+                  padding: '5px 10px', borderRadius: 6, fontSize: 11, border: '1px solid var(--border)',
+                  background: 'var(--bg-tertiary)', color: 'var(--text-primary)', width: 200,
+                }}
+              />
+              <button type="submit" style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer',
+              }}>Save</button>
+              <button type="button" onClick={() => { setEditingFolder(null); setFolderUrl(''); }} style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+              }}>Cancel</button>
+            </form>
+          );
+        }
+        return url ? (
+          <div key={f.key} style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '5px 8px 5px 10px',
+            borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: `${f.color}18`, color: f.color, border: `1px solid ${f.color}44`,
+          }}>
+            <a href={url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
+              {f.icon} {f.label}
+            </a>
+            <button onClick={(e) => handleClearFolder(f.key, e)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'inherit', opacity: 0.8,
+            }} title="Clear"><X size={12} /></button>
+          </div>
+        ) : (
+          <button
+            key={f.key}
+            onClick={() => { setEditingFolder(f.key); setFolderUrl(''); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+              borderRadius: 6, fontSize: 11, fontWeight: 600,
+              background: 'transparent', color: 'var(--text-muted)', border: '1px dashed var(--border)', cursor: 'pointer',
+            }}
+          >
+            {f.icon} {f.label}
+          </button>
+        );
+      })}
+      {client.phone && (
+        <span style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+          borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)',
+          background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+        }}>
+          <Phone size={12} /> {client.phone}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -452,16 +554,54 @@ function ContactsTab({ contacts }) {
   );
 }
 
-function WikiTab({ wikiLinks }) {
-  if (wikiLinks.length === 0) return <Empty msg="No wiki links added yet" />;
+const WIKI_LINK_TYPES = ['Google Sheets', 'Google Docs', 'Google Drive', 'Dropbox', 'Looker Studio', 'YouTube', 'Loom Video', 'External Tool', 'Documentation', 'Notion DB'];
+
+function WikiTab({ wikiLinks, clientId, refreshWikiLinks }) {
+  const supabase = createClient();
+  const [editingId, setEditingId] = useState(null);
+  const [addingSection, setAddingSection] = useState(null);
+  const [editForm, setEditForm] = useState({ label: '', url: '', link_type: 'Google Sheets' });
+  const [addForm, setAddForm] = useState({ label: '', url: '', link_type: 'Google Sheets' });
+  const [saving, setSaving] = useState(false);
+
   const grouped = {};
-  wikiLinks.forEach(w => {
+  (wikiLinks || []).forEach(w => {
     if (!grouped[w.section]) grouped[w.section] = [];
     grouped[w.section].push(w);
   });
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingId) return;
+    setSaving(true);
+    const { error } = await supabase.from('wiki_links').update({ label: editForm.label, url: editForm.url, link_type: editForm.link_type }).eq('id', editingId);
+    setSaving(false);
+    if (!error) { setEditingId(null); refreshWikiLinks(); }
+  };
+
+  const handleDelete = async (linkId) => {
+    if (!confirm('Delete this link?')) return;
+    const { error } = await supabase.from('wiki_links').delete().eq('id', linkId);
+    if (!error) refreshWikiLinks();
+  };
+
+  const handleSaveAdd = async (e) => {
+    e.preventDefault();
+    if (!addingSection || !addForm.label.trim() || !addForm.url.trim()) return;
+    setSaving(true);
+    const { error } = await supabase.from('wiki_links').insert({
+      client_id: clientId, section: addingSection, label: addForm.label.trim(), url: addForm.url.trim(),
+      link_type: addForm.link_type, sort_order: 0,
+    });
+    setSaving(false);
+    if (!error) { setAddingSection(null); setAddForm({ label: '', url: '', link_type: 'Google Sheets' }); refreshWikiLinks(); }
+  };
+
+  const sectionsToShow = [...new Set([...Object.keys(WIKI_SECTIONS), ...Object.keys(grouped)])];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {Object.entries(grouped).map(([section, links]) => {
+      {sectionsToShow.map((section) => {
+        const links = grouped[section] || [];
         const config = WIKI_SECTIONS[section] || { label: section, color: '#64748b', icon: '📄' };
         return (
           <div key={section} style={{
@@ -469,32 +609,60 @@ function WikiTab({ wikiLinks }) {
           }}>
             <div style={{
               fontSize: 13, fontWeight: 700, color: config.color, marginBottom: 12,
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               {config.icon} {config.label}
+              <button onClick={() => setAddingSection(addingSection === section ? null : section)} style={{
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer',
+              }}>+ Add</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {links.map(link => (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 12px', borderRadius: 6,
-                    background: 'var(--bg-tertiary)', textDecoration: 'none',
-                    transition: 'background 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-                >
-                  <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>{link.label}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>{link.link_type}</span>
-                  <ExternalLink size={12} style={{ color: 'var(--text-muted)' }} />
-                </a>
+                editingId === link.id ? (
+                  <form key={link.id} onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
+                    <input type="text" placeholder="Label" value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} required
+                      style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }} />
+                    <input type="url" placeholder="URL" value={editForm.url} onChange={e => setEditForm(f => ({ ...f, url: e.target.value }))} required
+                      style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }} />
+                    <select value={editForm.link_type} onChange={e => setEditForm(f => ({ ...f, link_type: e.target.value }))}
+                      style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }}>
+                      {WIKI_LINK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer' }}>Save</button>
+                      <button type="button" onClick={() => setEditingId(null)} style={{ padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div key={link.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 6,
+                    background: 'var(--bg-tertiary)',
+                  }}>
+                    <a href={link.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, textDecoration: 'none' }}>{link.label}</a>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-card)' }}>{link.link_type}</span>
+                    <a href={link.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--text-muted)' }}><ExternalLink size={12} /></a>
+                    <button onClick={() => { setEditingId(link.id); setEditForm({ label: link.label, url: link.url, link_type: link.link_type || 'Google Sheets' }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-muted)' }}><Pencil size={12} /></button>
+                    <button onClick={() => handleDelete(link.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--danger)' }}><Trash2 size={12} /></button>
+                  </div>
+                )
               ))}
             </div>
+            {addingSection === section && (
+              <form onSubmit={handleSaveAdd} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
+                <input type="text" placeholder="Label" value={addForm.label} onChange={e => setAddForm(f => ({ ...f, label: e.target.value }))} required
+                  style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }} />
+                <input type="url" placeholder="URL" value={addForm.url} onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))} required
+                  style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }} />
+                <select value={addForm.link_type} onChange={e => setAddForm(f => ({ ...f, link_type: e.target.value }))}
+                  style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }}>
+                  {WIKI_LINK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer' }}>Save</button>
+                  <button type="button" onClick={() => setAddingSection(null)} style={{ padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </form>
+            )}
           </div>
         );
       })}
@@ -502,22 +670,47 @@ function WikiTab({ wikiLinks }) {
   );
 }
 
-function ServicesTab({ client }) {
+function ServicesTab({ client, setClient, clientId }) {
+  const supabase = createClient();
+
+  const handleToggle = async (serviceKey) => {
+    const newVal = !client[serviceKey];
+    const { error } = await supabase.from('clients').update({ [serviceKey]: newVal }).eq('id', clientId);
+    if (!error) setClient({ ...client, [serviceKey]: newVal });
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {SERVICE_KEYS.map(s => {
-        const active = client[s.key];
+        const active = !!client[s.key];
         return (
-          <div key={s.key} style={{
-            background: 'var(--bg-card)', border: `1px solid ${active ? s.color + '44' : 'var(--border)'}`,
-            borderRadius: 10, padding: 16, opacity: active ? 1 : 0.4,
-            transition: 'all 0.15s ease',
-          }}>
-            <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: active ? s.color : 'var(--text-muted)' }}>{s.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {active ? 'Active' : 'Not subscribed'}
+          <div
+            key={s.key}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'var(--bg-card)', border: `1px solid ${active ? s.color + '44' : 'var(--border)'}`,
+              borderRadius: 10, padding: 16, opacity: active ? 1 : 0.7,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20 }}>{s.icon}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: active ? s.color : 'var(--text-muted)' }}>{s.label}</span>
             </div>
+            <button
+              onClick={() => handleToggle(s.key)}
+              style={{
+                width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                background: active ? s.color : 'var(--bg-tertiary)',
+                position: 'relative', transition: 'background 0.15s ease',
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
+                background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                left: active ? 22 : 2, transition: 'left 0.15s ease',
+              }} />
+            </button>
           </div>
         );
       })}
@@ -543,9 +736,9 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
   }, []);
 
   const cycleStatus = async (task) => {
-    const order = ['Not Started', 'In Progress', 'Done'];
+    const order = ['Not Started', 'In Progress', 'Pending Client Approval', 'Done'];
     const idx = order.indexOf(task.status);
-    const next = idx >= 0 && idx < 2 ? order[idx + 1] : 'Not Started';
+    const next = idx >= 0 && idx < 3 ? order[idx + 1] : 'Not Started';
     const updates = { status: next };
     if (next === 'Done') updates.completed_at = new Date().toISOString();
     const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
@@ -682,7 +875,7 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
   );
 }
 
-function ContentTab({ content, clientId, refreshContent }) {
+function ContentTab({ content, client, clientId, refreshContent, setClient }) {
   const supabase = createClient();
   const [teamMembers, setTeamMembers] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -736,8 +929,58 @@ function ContentTab({ content, clientId, refreshContent }) {
     return m ? `${m.first_name} ${m.last_name}` : '—';
   };
 
+  const saveDate = async (field, date) => {
+    const { error } = await supabase.from('clients').update({ [field]: date || null }).eq('id', clientId);
+    if (!error) setClient({ ...client, [field]: date || null });
+  };
+
+  const daysAgo = (d) => {
+    if (!d) return null;
+    const diff = Math.floor((new Date() - new Date(d)) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const dateColor = (days) => {
+    if (days == null) return 'var(--text-muted)';
+    if (days <= 7) return '#10b981';
+    if (days <= 21) return '#f59e0b';
+    return '#ef4444';
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* At a Glance */}
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20,
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
+      }}>
+        {[
+          { key: 'last_gbp_post_date', label: 'Last GBP Post' },
+          { key: 'last_social_post_date', label: 'Last Social Post' },
+          { key: 'last_website_post_date', label: 'Last Website Post' },
+        ].map(({ key, label }) => {
+          const d = client[key];
+          const days = daysAgo(d);
+          return (
+            <div key={key}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>{label}</div>
+              <input
+                type="date"
+                value={d || ''}
+                onChange={e => saveDate(key, e.target.value || null)}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13,
+                }}
+              />
+              <div style={{ fontSize: 12, marginTop: 6, color: dateColor(days) }}>
+                {d ? (days <= 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`) : 'No date set'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{content.length} content item{content.length !== 1 ? 's' : ''}</span>
         <button

@@ -2,7 +2,6 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/theme';
-import { SERVICE_KEYS } from '@/lib/constants';
 import {
   LayoutDashboard, Users, CheckSquare, FileText, Activity,
   Sun, Moon, LogOut, ChevronLeft, ChevronRight
@@ -135,55 +134,6 @@ export default function Sidebar() {
             </button>
           );
         })}
-
-        {/* Service Filters */}
-        {!collapsed && (
-          <>
-            <div style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              padding: '16px 12px 8px',
-            }}>
-              By Service
-            </div>
-            {SERVICE_KEYS.map((svc) => (
-              <button
-                key={svc.key}
-                onClick={() => router.push(`/clients?service=${svc.key}`)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 12px',
-                  background: 'transparent',
-                  color: 'var(--text-secondary)',
-                  border: 'none',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  transition: 'all 0.15s ease',
-                  marginBottom: 1,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-hover)';
-                  e.currentTarget.style.color = svc.color;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{svc.icon}</span>
-                {svc.label}
-              </button>
-            ))}
-          </>
-        )}
       </nav>
 
       {/* Footer: Theme + Logout */}
