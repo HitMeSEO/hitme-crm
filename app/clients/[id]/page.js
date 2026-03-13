@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import AppShell from '@/components/AppShell';
-import { SERVICE_KEYS, STATUS_COLORS, WIKI_SECTIONS } from '@/lib/constants';
-import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin } from 'lucide-react';
+import { SERVICE_KEYS, STATUS_COLORS, WIKI_SECTIONS, TASK_STATUS_COLORS, TASK_STATUSES, TASK_PRIORITIES, PRIORITY_COLORS, CONTENT_TYPE_COLORS, CONTENT_TYPES, CONTENT_STATUS_COLORS, CONTENT_STATUSES, ACTIVITY_TYPES } from '@/lib/constants';
+import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Trash2, Plus } from 'lucide-react';
 
 const TABS = [
   { key: 'overview', label: 'Overview' },
@@ -32,6 +32,35 @@ export default function ClientDetailPage() {
   const [activities, setActivities] = useState([]);
   const [content, setContent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const refreshTasks = async () => {
+    const { data } = await supabase.from('tasks').select('*').eq('client_id', id).order('created_at', { ascending: false });
+    setTasks(data || []);
+  };
+
+  const refreshContent = async () => {
+    const { data } = await supabase.from('content_queue').select('*').eq('client_id', id).order('created_at', { ascending: false });
+    setContent(data || []);
+  };
+
+  const refreshActivities = async () => {
+    const { data } = await supabase.from('activities').select('*').eq('client_id', id).order('created_at', { ascending: false });
+    setActivities(data || []);
+  };
+
+  const handleDeleteClient = async () => {
+    setDeleting(true);
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    setDeleting(false);
+    setShowDeleteConfirm(false);
+    if (error) {
+      console.error('Delete failed:', error);
+      return;
+    }
+    router.push('/clients');
+  };
 
   useEffect(() => {
     async function load() {
@@ -99,7 +128,7 @@ export default function ClientDetailPage() {
         <ArrowLeft size={14} /> Back to Clients
       </button>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
           {client.company_name}
         </h1>
@@ -110,7 +139,43 @@ export default function ClientDetailPage() {
         }}>
           {client.status}
         </span>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+            background: 'rgba(239,68,68,0.1)', color: 'var(--danger)',
+            border: '1px solid var(--danger)', cursor: 'pointer',
+          }}
+        >
+          <Trash2 size={14} /> Delete
+        </button>
       </div>
+
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }} onClick={() => !deleting && setShowDeleteConfirm(false)}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, maxWidth: 400, width: '90%',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Delete client?</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              Are you sure you want to delete {client.company_name}? This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => !deleting && setShowDeleteConfirm(false)} style={{
+                padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+              }}>Cancel</button>
+              <button onClick={handleDeleteClient} disabled={deleting} style={{
+                padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                background: 'var(--danger)', color: 'white', border: 'none', cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1,
+              }}>{deleting ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick links row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -186,9 +251,9 @@ export default function ClientDetailPage() {
       {tab === 'contacts' && <ContactsTab contacts={contacts} />}
       {tab === 'wiki' && <WikiTab wikiLinks={wikiLinks} />}
       {tab === 'services' && <ServicesTab client={client} />}
-      {tab === 'tasks' && <PlaceholderTab name="Tasks" count={tasks.length} />}
-      {tab === 'content' && <PlaceholderTab name="Content" count={content.length} />}
-      {tab === 'notes' && <PlaceholderTab name="Notes" count={activities.length} />}
+      {tab === 'tasks' && <TasksTab tasks={tasks} clientId={id} refreshTasks={refreshTasks} />}
+      {tab === 'content' && <ContentTab content={content} clientId={id} refreshContent={refreshContent} />}
+      {tab === 'notes' && <NotesTab activities={activities} clientId={id} refreshActivities={refreshActivities} />}
     </AppShell>
   );
 }
@@ -456,6 +521,417 @@ function ServicesTab({ client }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function TasksTab({ tasks, clientId, refreshTasks }) {
+  const supabase = createClient();
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({
+    title: '', description: '', status: 'Not Started', priority: 'Medium', due_date: '', assigned_to: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('team_members').select('*').eq('is_active', true).order('first_name');
+      setTeamMembers(data || []);
+    }
+    load();
+  }, []);
+
+  const cycleStatus = async (task) => {
+    const order = ['Not Started', 'In Progress', 'Done'];
+    const idx = order.indexOf(task.status);
+    const next = idx >= 0 && idx < 2 ? order[idx + 1] : 'Not Started';
+    const updates = { status: next };
+    if (next === 'Done') updates.completed_at = new Date().toISOString();
+    const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
+    if (!error) refreshTasks();
+  };
+
+  const handleSaveTask = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setSaving(true);
+    const { error } = await supabase.from('tasks').insert({
+      client_id: clientId,
+      title: form.title.trim(),
+      description: form.description || null,
+      status: form.status,
+      priority: form.priority,
+      due_date: form.due_date || null,
+      assigned_to: form.assigned_to || null,
+    });
+    setSaving(false);
+    if (!error) {
+      setForm({ title: '', description: '', status: 'Not Started', priority: 'Medium', due_date: '', assigned_to: '' });
+      setShowAddForm(false);
+      refreshTasks();
+    }
+  };
+
+  const getMemberName = (id) => {
+    if (!id) return '—';
+    const m = teamMembers.find(t => t.id === id);
+    return m ? `${m.first_name} ${m.last_name}` : '—';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tasks.length} task{tasks.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'white',
+            border: 'none', cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} /> Add Task
+        </button>
+      </div>
+
+      {showAddForm && (
+        <form onSubmit={handleSaveTask} style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Title *</label>
+              <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }} placeholder="Task title" />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Status</label>
+              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Priority</label>
+              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                {TASK_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Due Date</label>
+              <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Assign To</label>
+              <select value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                <option value="">— Unassigned —</option>
+                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Description</label>
+              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13, resize: 'vertical' }} placeholder="Optional description" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" disabled={saving} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+            }}>{saving ? 'Saving...' : 'Save Task'}</button>
+            <button type="button" onClick={() => setShowAddForm(false)} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+            }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {tasks.length === 0 && !showAddForm ? (
+        <Empty msg="No tasks yet. Add one to get started." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tasks.map(task => (
+            <div key={task.id} style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 16,
+              display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+            }}>
+              <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{task.title}</div>
+                {task.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{task.description}</div>}
+              </div>
+              <button onClick={() => cycleStatus(task)} style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: 'none',
+                background: `${TASK_STATUS_COLORS[task.status] || '#64748b'}18`, color: TASK_STATUS_COLORS[task.status] || '#64748b',
+              }}>{task.status}</button>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                background: `${PRIORITY_COLORS[task.priority] || '#64748b'}18`, color: PRIORITY_COLORS[task.priority] || '#64748b',
+              }}>{task.priority}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {task.due_date ? new Date(task.due_date).toLocaleDateString() : '—'}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{getMemberName(task.assigned_to)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContentTab({ content, clientId, refreshContent }) {
+  const supabase = createClient();
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({
+    title: '', content_type: 'Blog Post', status: 'Not Started', due_date: '', assigned_to: '', notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('team_members').select('*').eq('is_active', true).order('first_name');
+      setTeamMembers(data || []);
+    }
+    load();
+  }, []);
+
+  const cycleStatus = async (item) => {
+    const order = ['Not Started', 'In Progress', 'Review', 'Approved', 'Published'];
+    const idx = order.indexOf(item.status);
+    const next = idx >= 0 && idx < 4 ? order[idx + 1] : 'Not Started';
+    const updates = { status: next };
+    if (next === 'Published') updates.published_date = new Date().toISOString().split('T')[0];
+    const { error } = await supabase.from('content_queue').update(updates).eq('id', item.id);
+    if (!error) refreshContent();
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setSaving(true);
+    const { error } = await supabase.from('content_queue').insert({
+      client_id: clientId,
+      title: form.title.trim(),
+      content_type: form.content_type,
+      status: form.status,
+      due_date: form.due_date || null,
+      assigned_to: form.assigned_to || null,
+      notes: form.notes || null,
+    });
+    setSaving(false);
+    if (!error) {
+      setForm({ title: '', content_type: 'Blog Post', status: 'Not Started', due_date: '', assigned_to: '', notes: '' });
+      setShowAddForm(false);
+      refreshContent();
+    }
+  };
+
+  const getMemberName = (id) => {
+    if (!id) return '—';
+    const m = teamMembers.find(t => t.id === id);
+    return m ? `${m.first_name} ${m.last_name}` : '—';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{content.length} content item{content.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'white',
+            border: 'none', cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} /> Add Content
+        </button>
+      </div>
+
+      {showAddForm && (
+        <form onSubmit={handleSave} style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Title *</label>
+              <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }} placeholder="Content title" />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Content Type</label>
+              <select value={form.content_type} onChange={e => setForm(f => ({ ...f, content_type: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Status</label>
+              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                {CONTENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Due Date</label>
+              <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Assign To</label>
+              <select value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                <option value="">— Unassigned —</option>
+                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Notes</label>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13, resize: 'vertical' }} placeholder="Optional notes" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" disabled={saving} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+            }}>{saving ? 'Saving...' : 'Save'}</button>
+            <button type="button" onClick={() => setShowAddForm(false)} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+            }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {content.length === 0 && !showAddForm ? (
+        <Empty msg="No content yet. Add one to get started." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {content.map(item => (
+            <div key={item.id} style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 16,
+              display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+            }}>
+              <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{item.title}</div>
+                {item.notes && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{item.notes}</div>}
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                background: `${CONTENT_TYPE_COLORS[item.content_type] || '#64748b'}18`, color: CONTENT_TYPE_COLORS[item.content_type] || '#64748b',
+              }}>{item.content_type}</span>
+              <button onClick={() => cycleStatus(item)} style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: 'none',
+                background: `${CONTENT_STATUS_COLORS[item.status] || '#64748b'}18`, color: CONTENT_STATUS_COLORS[item.status] || '#64748b',
+              }}>{item.status}</button>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {item.due_date ? new Date(item.due_date).toLocaleDateString() : '—'}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{getMemberName(item.assigned_to)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesTab({ activities, clientId, refreshActivities }) {
+  const supabase = createClient();
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({ activity_type: 'Note', content: '' });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.content.trim()) return;
+    setSaving(true);
+    const { error } = await supabase.from('activities').insert({
+      client_id: clientId,
+      activity_type: form.activity_type,
+      content: form.content.trim(),
+    });
+    setSaving(false);
+    if (!error) {
+      setForm({ activity_type: 'Note', content: '' });
+      setShowAddForm(false);
+      refreshActivities();
+    }
+  };
+
+  const getActivityBadge = (type) => ACTIVITY_TYPES.find(a => a.value === type)?.badge || '📌';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{activities.length} activit{activities.length !== 1 ? 'ies' : 'y'}</span>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'white',
+            border: 'none', cursor: 'pointer',
+          }}
+        >
+          <Plus size={14} /> Add Note
+        </button>
+      </div>
+
+      {showAddForm && (
+        <form onSubmit={handleSave} style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Type</label>
+              <select value={form.activity_type} onChange={e => setForm(f => ({ ...f, activity_type: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13 }}>
+                {ACTIVITY_TYPES.map(a => <option key={a.value} value={a.value}>{a.badge} {a.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Content *</label>
+              <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} required rows={4}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 13, resize: 'vertical' }} placeholder="Note content..." />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" disabled={saving} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+            }}>{saving ? 'Saving...' : 'Save'}</button>
+            <button type="button" onClick={() => setShowAddForm(false)} style={{
+              padding: '8px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer',
+            }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {activities.length === 0 && !showAddForm ? (
+        <Empty msg="No activity yet. Add a note to get started." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {activities.map(act => (
+            <div key={act.id} style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 16,
+              display: 'flex', gap: 12, alignItems: 'flex-start',
+            }}>
+              <span style={{
+                fontSize: 14, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', flexShrink: 0,
+              }}>{getActivityBadge(act.activity_type)} {act.activity_type}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{act.content}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                  {new Date(act.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
