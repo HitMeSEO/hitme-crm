@@ -224,7 +224,7 @@ export default function TasksPage() {
                 {filtered.map(task => (
                   <tr
                     key={task.id}
-                    onClick={() => router.push(`/clients/${task.client_id}`)}
+                    onClick={() => router.push(`/clients/${task.client_id}?tab=tasks`)}
                     style={{
                       borderBottom: '1px solid var(--border)',
                       cursor: 'pointer',

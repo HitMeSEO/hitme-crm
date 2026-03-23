@@ -56,8 +56,14 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
+  font-size: 15px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+}
+
+button {
+  min-height: 36px;
+  font-family: inherit;
 }
 
 /* Scrollbar */
@@ -74,4 +80,143 @@ a:hover { color: var(--accent-hover); }
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); transform: scale(1); }
+  50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); transform: scale(1.12); }
+}
+
+/* ============================================================
+   RESPONSIVE — Mobile layout
+   ============================================================ */
+
+/* Bottom nav: hidden on desktop */
+.crm-bottom-nav { display: none; }
+
+/* ============================================================
+   TABLET (768–1024)
+   ============================================================ */
+@media (max-width: 1024px) {
+  .crm-main {
+    padding: 20px 20px !important;
+  }
+}
+
+/* ============================================================
+   MOBILE (< 768)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Kill the sidebar, give all space to main */
+  .crm-sidebar { display: none !important; }
+
+  /* Main content area */
+  .crm-main {
+    padding: 12px 12px 80px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+  }
+
+  /* Bottom navigation bar */
+  .crm-bottom-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 64px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 500;
+    align-items: stretch;
+    justify-content: space-around;
+  }
+
+  /* Responsive grids — stack on mobile */
+  .grid-2col { grid-template-columns: 1fr !important; }
+  .grid-3col { grid-template-columns: 1fr !important; }
+  .grid-form  { grid-template-columns: 1fr !important; }
+
+  /* Client header — stack name and buttons vertically */
+  h1 { font-size: 20px !important; }
+
+  /* Tab bar — scrollable with fade hint */
+  .crm-tab-bar {
+    gap: 0 !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  }
+  .crm-tab-bar::-webkit-scrollbar { display: none; }
+  .crm-tab-bar button {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+
+  /* Modals — full-width bottom sheet on mobile */
+  .crm-modal-inner {
+    max-width: 100% !important;
+    border-radius: 12px 12px 0 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    padding: 20px 16px !important;
+  }
+  .crm-modal-wrap {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  /* Cards and sections — tighter padding on mobile */
+  [style*="padding: 20"] {
+    padding: 14px !important;
+  }
+
+  /* Force all inline grid layouts to stack on mobile */
+  [style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Flex rows with badges — allow wrapping */
+  [style*="display: flex"][style*="gap: 12"],
+  [style*="display: flex"][style*="gap: 16"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* Location cards — stack content vertically */
+  [style*="display: flex"][style*="alignItems: center"][style*="gap: 16"][style*="flexWrap: wrap"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  /* Buttons — full width on mobile when in a flex column */
+  button[style*="padding: '9px 18px'"] {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Audit dashboard score circle — smaller on mobile */
+  [style*="width: 80"][style*="height: 80"] {
+    width: 60px !important;
+    height: 60px !important;
+  }
+  [style*="width: 70"][style*="height: 70"] {
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  /* Font size adjustments */
+  [style*="fontSize: 24"] { font-size: 18px !important; }
+  [style*="fontSize: 22"] { font-size: 16px !important; }
+  [style*="fontSize: 48"] { font-size: 32px !important; }
 }

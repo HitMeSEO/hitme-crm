@@ -1,0 +1,450 @@
+// /app/api/content/generate/route.js
+// Generates content from a completed keyword brief
+// Supports: service_location_page, blog_post, gbp_post
+
+import { createClient } from '@/lib/supabase/server';
+import Anthropic from '@anthropic-ai/sdk';
+
+export const maxDuration = 120;
+
+// ============================================================
+// SHARED WRITING RULES (appended to service page + blog prompts)
+// ============================================================
+const WRITING_RULES = `
+=== WRITING RULES (NON-NEGOTIABLE) ===
+1. NEVER repeat the same credential, stat, or selling point more than once in the entire page. If you mention a specific number or fact in one section, do not mention it again anywhere.
+2. Vary paragraph lengths — mix 2-line, 3-line, and 4-line paragraphs. Never have more than 3 paragraphs in a row that are the same length.
+3. Vary sentence structure — mix short punchy sentences (5-8 words) with longer ones. Never start two consecutive sentences the same way.
+4. No em dashes (—) anywhere in the content.
+5. No one-sentence paragraphs anywhere in the body.
+6. Do NOT use these AI-pattern phrases (ban list): "skilled and aggressive", "fight for your rights", "don't face this alone", "time is critical", "comprehensive defense strategy", "tailored to your specific", "unique combination of", "when it comes to", "in today's", "navigating the complexities"
+7. After the first paragraph, the content should EDUCATE and INFORM — not pitch. The client name should appear naturally 3-4 times total across the whole page, not in every section.
+8. FAQ answers: 2-3 sentences MAX. Short and direct. Do not repeat information already covered in the body content.
+9. Write like a local expert talking to a neighbor. Use contractions. Be direct. Do not sound like a marketing brochure.
+10. Each H2 section must use a DIFFERENT writing style — one might open with a short real-world example, another uses a list, another is conversational. Do NOT make every section follow the same explain-then-pitch pattern.
+
+=== ANTI-AI DETECTION RULES ===
+- Vary vocabulary — do not reuse the same adjective within 500 words of its first use.
+- Use concrete specifics over vague claims. Write "23 years in business" not "decades of experience." Write specific street names, courthouse details, neighborhood names, local regulations — things only a local would know.
+- Every claim must answer "why should the reader care?" — cut anything that doesn't.
+- Write the way the business owner would talk, not the way a corporate brochure reads.
+
+=== SELF-EDIT PASS (do this before returning) ===
+After writing the full draft, run these five checks internally and fix any issues found:
+1. Clarity sweep: Is every sentence immediately understandable on first read?
+2. Voice sweep: Does it sound consistently human throughout, not AI-generated?
+3. So-what sweep: Does every claim answer "why should the reader care?"
+4. Specificity sweep: Replace any vague language ("many years", "great service") with concrete details.
+5. Repetition check: Find and remove any point, fact, or credential mentioned more than once.
+
+Return the FINAL EDITED version, not the first draft.`;
+
+// ============================================================
+// PROMPT: SERVICE LOCATION PAGE
+// ============================================================
+function buildServicePagePrompt(client, location, settings, brief, targetService) {
+  const city = location.address_city || client.address_city || '';
+  const state = location.address_state || client.address_state || '';
+  const phone = client.phone || '';
+  const website = client.website || '';
+
+  const localDetails = brief.local_details || {};
+  const localLines = [
+    localDetails.county && `County: ${localDetails.county}`,
+    localDetails.neighborhoods?.length && `Neighborhoods: ${localDetails.neighborhoods.join(', ')}`,
+    localDetails.landmarks?.length && `Landmarks: ${localDetails.landmarks.join(', ')}`,
+    localDetails.zip_codes?.length && `ZIP Codes: ${localDetails.zip_codes.join(', ')}`,
+    localDetails.local_regulations?.length && `Local regulations: ${localDetails.local_regulations.join('; ')}`,
+  ].filter(Boolean).join('\n');
+
+  const competitorContext = (brief.competitor_analysis || [])
+    .slice(0, 3)
+    .map(c => `- ${c.title || c.url}: strengths: ${c.strengths || 'n/a'} | gap: ${c.gaps || 'n/a'}`)
+    .join('\n');
+
+  const h2List = (brief.recommended_h_tags?.h2s || []).map((h, i) => `  H2 ${i + 1}: ${h}`).join('\n');
+  const questionsList = (brief.questions_to_answer || []).map((q, i) => `  ${i + 1}. ${q}`).join('\n');
+  const secondaryKws = (brief.secondary_keywords || []).join(', ');
+  const requiredEntities = (brief.required_entities || []).join(', ');
+  const primaryKeyword = targetService
+    ? `${targetService} ${city}`.trim()
+    : brief.primary_keyword;
+
+  return `You are an expert SEO content writer for local service businesses.
+
+Write a complete service/location page. Return ONLY a valid JSON object — no markdown, no preamble, nothing outside the JSON.
+
+=== CLIENT ===
+Company: ${client.company_name}
+Website: ${website}
+Phone: ${phone}
+City: ${city}, ${state}
+Target Service: ${targetService || brief.primary_keyword}
+Industry: ${settings?.industry_type || 'local services'}
+${settings?.trust_signals ? `Trust signals: ${settings.trust_signals}` : ''}
+${settings?.brand_voice_notes ? `Brand voice: ${settings.brand_voice_notes}` : ''}
+
+=== KEYWORD BRIEF ===
+Primary Keyword: ${primaryKeyword}
+Secondary Keywords: ${secondaryKws}
+Required Entities: ${requiredEntities}
+Target Word Count: ${brief.target_word_count || 1200}
+Content Angle: ${brief.content_angle || ''}
+
+=== RECOMMENDED STRUCTURE ===
+H1: ${brief.recommended_h_tags?.h1 || primaryKeyword}
+${h2List}
+
+=== LOCAL DETAILS (use these throughout the content) ===
+${localLines || 'None available — infer from city/state'}
+
+=== FAQ QUESTIONS (MANDATORY — answer all in a FAQ section at the end) ===
+${questionsList || 'Write 3-5 relevant FAQs for this service in this city'}
+IMPORTANT: Format each FAQ as <h3>Question here?</h3> followed by <p>Answer here</p>. This exact format is required for FAQ schema generation. Every service location page MUST have a FAQ section.
+
+=== COMPETITOR CONTEXT (do NOT copy, use for gap analysis) ===
+${competitorContext || 'None available'}
+
+=== PAGE HIERARCHY (MANDATORY — follow this EXACT structure) ===
+- META TITLE: Format MUST be: "${city}, ${state} ${targetService || brief.primary_keyword} – ${client.company_name}" (max 60 chars). City and state abbreviation come FIRST, then keyword, then brand name after a dash.
+- H1: Must MATCH the meta title exactly (minus the – Brand Name part). Example: "${city}, ${state} ${targetService || brief.primary_keyword}"
+- H2: A flip-flop rewrite of the H1 — rearrange the words. If H1 is "Charlotte, NC Roofing Contractor" then H2 might be "Expert Roofing Services in Charlotte, North Carolina"
+- H3 SERVICE SECTIONS: For each service area, alternate the keyword placement:
+  * Odd sections (1st, 3rd, 5th): H3 = "[Service] [City]" (e.g. "Roof Replacement Charlotte")
+  * Even sections (2nd, 4th, 6th): H3 = "[City] [Service]" (e.g. "Charlotte Roof Repair")
+  * Each service section has exactly 2 supporting paragraphs (max 4 lines each)
+- FAQ SECTION: Comes AFTER all service sections, BEFORE any "Why Choose" section
+  * Use <div class="h2-style">Keyword FAQs</div> as the header (styled like H2 but coded as div to avoid conflicting with the actual H2)
+  * Use <h4>Question?</h4> for each question
+  * Use <p>Answer</p> for each answer (2-3 sentences max)
+  * Include 3-5 FAQs based on the questions_to_answer from the brief
+- WHY CHOOSE section: Final section with H2 "Why Choose ${client.company_name}"
+
+=== SEO / STRUCTURE RULES ===
+- Meta description: max 160 chars, include a CTA like "Call today" or "Get a free quote", no pipes (|)
+- Body: naturally include secondary keywords and required entities throughout
+- Weave in local neighborhoods, landmarks, and county name in the first half of the content
+- Target exactly ${brief.target_word_count || 1200} words in body_html
+- Introduce ${client.company_name} as THE solution in the FIRST paragraph only, with a link: <a href="${website}">${client.company_name}</a>
+- No DIY advice or tips for doing it yourself
+- Output valid HTML using only: p, h2, h3, h4, div, ul, li, strong, em, a tags
+- URL slug: lowercase, hyphens only, no "the", no special characters, 3-6 words
+- CRITICAL: Do NOT use "H1 Expert keyword" or "H1 of [keyword] in [city]" patterns. The H1 follows the city-first format above. This prevents over-optimization penalties.
+${WRITING_RULES}
+
+Return this exact JSON structure:
+{
+  "title_tag": "...",
+  "meta_description": "...",
+  "h1": "...",
+  "url_slug": "...",
+  "body_html": "..."
+}`;
+}
+
+// ============================================================
+// PROMPT: BLOG POST
+// ============================================================
+function buildBlogPostPrompt(client, location, settings, brief, targetService) {
+  const city = location.address_city || client.address_city || '';
+  const state = location.address_state || client.address_state || '';
+  const phone = client.phone || '';
+  const website = client.website || '';
+  const keyword = targetService || brief.primary_keyword;
+  const secondaryKws = (brief.secondary_keywords || []).slice(0, 5).join(', ');
+
+  return `You are an expert content writer for local service businesses.
+
+Write an informational blog post targeting the keyword: "${keyword}"
+
+Return ONLY a valid JSON object — no markdown, no preamble, nothing outside the JSON.
+
+=== CLIENT ===
+Company: ${client.company_name}
+Website: ${website}
+Phone: ${phone}
+Location: ${city}, ${state}
+${settings?.trust_signals ? `Trust signals: ${settings.trust_signals}` : ''}
+${settings?.brand_voice_notes ? `Brand voice: ${settings.brand_voice_notes}` : ''}
+
+=== KEYWORD CONTEXT ===
+Primary Topic: ${keyword}
+Related Terms: ${secondaryKws}
+Target Word Count: 800-1000 words
+
+=== BLOG POST RULES ===
+- This is an INFORMATIONAL article, not a sales page. Educate the reader.
+- Title tag: max 60 chars, keyword-forward, Title Case, no pipes (|)
+- Meta description: max 160 chars, include a soft CTA, no pipes (|)
+- H1: clear, benefit-driven headline about the topic
+- Use 3-4 H2 sections covering different angles of the topic
+- End with a brief section mentioning ${client.company_name} as a resource, with a link to ${website}
+- Include one internal link to the website: <a href="${website}">${client.company_name}</a>
+- URL slug: lowercase, hyphens only, no "the", 3-6 words
+- Output valid HTML using only: p, h2, h3, ul, li, strong, em, a tags
+- Do NOT include local details (neighborhoods, zip codes) — this is a broad educational piece
+${WRITING_RULES}
+
+Return this exact JSON structure:
+{
+  "title_tag": "...",
+  "meta_description": "...",
+  "h1": "...",
+  "url_slug": "...",
+  "body_html": "..."
+}`;
+}
+
+// ============================================================
+// PROMPT: GBP POST
+// ============================================================
+function buildGbpPostPrompt(client, location, settings, brief, targetService, linkUrl) {
+  const city = location.address_city || client.address_city || '';
+  const state = location.address_state || client.address_state || '';
+  const phone = client.phone || '';
+  const keyword = targetService || brief.primary_keyword;
+
+  return `You are writing a Google Business Profile post for a local service business.
+
+Return ONLY a valid JSON object — no markdown, no preamble, nothing outside the JSON.
+
+=== CLIENT ===
+Company: ${client.company_name}
+Phone: ${phone}
+City: ${city}, ${state}
+Service to promote: ${keyword}
+Link URL: ${linkUrl || client.website || ''}
+${settings?.brand_voice_notes ? `Brand voice: ${settings.brand_voice_notes}` : ''}
+
+=== GBP POST RULES ===
+- Length: 120-160 words TOTAL (count carefully)
+- Plain text ONLY — no HTML tags, no markdown, no bullet points
+- Write in first person or second person ("We" or "You"), not third person
+- First sentence: lead with the service and a specific local detail (city name, neighborhood, or local reference)
+- Middle: 2-3 sentences of value — what the service solves, a quick concrete detail (price range, timeframe, or fact)
+- End with a hard CTA: include the phone number (${phone}) and the link URL (${linkUrl || client.website || ''})
+- No em dashes. No one-sentence paragraphs. No AI-pattern phrases.
+- Sound like a real local business owner, not a marketing bot.
+- Do NOT use: "comprehensive", "tailored", "unique", "navigating", "in today's"
+- The post_text field is the COMPLETE post — no title, no H-tags, just the post body
+
+Return this exact JSON structure:
+{
+  "title_tag": "${keyword} — ${client.company_name}",
+  "meta_description": "",
+  "h1": "${keyword} in ${city}, ${state}",
+  "url_slug": "",
+  "body_html": "<the full GBP post as plain text, no HTML tags>"
+}`;
+}
+
+// ============================================================
+// MAIN ROUTE HANDLER
+// ============================================================
+export async function POST(request) {
+  try {
+    const { clientId, locationId, page_type = 'service_location_page', target_service, link_url, editedBrief } = await request.json();
+
+    if (!clientId || !locationId) {
+      return Response.json({ error: 'clientId and locationId are required' }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+
+    const [
+      { data: client, error: clientError },
+      { data: location, error: locationError },
+      { data: settings },
+    ] = await Promise.all([
+      supabase.from('clients').select('*').eq('id', clientId).single(),
+      supabase.from('locations').select('*').eq('id', locationId).single(),
+      supabase.from('client_settings').select('*').eq('client_id', clientId).maybeSingle(),
+    ]);
+
+    if (clientError) console.error('[generate] client error:', clientError.message);
+    if (locationError) console.error('[generate] location error:', locationError.message);
+
+    if (!client || !location) {
+      return Response.json({ error: 'Client or location not found' }, { status: 404 });
+    }
+
+    if (location.research_status !== 'complete' || !location.keyword_brief) {
+      return Response.json(
+        { error: 'Location must have completed research before generating content' },
+        { status: 400 }
+      );
+    }
+
+    // Save edited brief back to the location record if Pam made changes
+    if (editedBrief && typeof editedBrief === 'object') {
+      const { error: briefSaveError } = await supabase
+        .from('locations')
+        .update({ keyword_brief: editedBrief })
+        .eq('id', locationId);
+      if (briefSaveError) console.error('[generate] brief save error:', briefSaveError.message);
+    }
+
+    const brief = editedBrief || location.keyword_brief;
+
+    // Pick the right prompt and token budget
+    let prompt;
+    let maxTokens;
+    let dbContentType;
+
+    if (page_type === 'gbp_post') {
+      prompt = buildGbpPostPrompt(client, location, settings, brief, target_service, link_url);
+      maxTokens = 2000;
+      dbContentType = 'GBP Post';
+    } else if (page_type === 'blog_post') {
+      prompt = buildBlogPostPrompt(client, location, settings, brief, target_service);
+      maxTokens = 10000;
+      dbContentType = 'Blog Post';
+    } else {
+      prompt = buildServicePagePrompt(client, location, settings, brief, target_service);
+      maxTokens = 12000;
+      dbContentType = 'service_location_page';
+    }
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = message.content[0]?.text?.trim() || '';
+    const cleaned = rawText.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    let generated;
+    try {
+      generated = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('[generate] JSON parse failed. Raw:', rawText.substring(0, 500));
+      throw new Error('Claude returned invalid JSON: ' + parseErr.message);
+    }
+
+    const { title_tag, meta_description, h1, url_slug, body_html } = generated;
+
+    if (!title_tag || !body_html) {
+      throw new Error('Claude response missing required fields (title_tag, body_html)');
+    }
+
+    // Auto-generate schema for service location pages
+    let schemaJson = null;
+    if (page_type === 'service_location_page' && body_html) {
+      const loc = location;
+      const city = loc.address_city || client.address_city || '';
+      const state = loc.address_state || client.address_state || '';
+      const localBusiness = {
+        '@context': 'https://schema.org',
+        '@type': 'LocalBusiness',
+        '@id': `${client.website || ''}#${city.toLowerCase().replace(/\s+/g, '-')}`,
+        name: client.company_name,
+        url: client.website || '',
+        telephone: client.phone || '',
+        address: { '@type': 'PostalAddress', addressLocality: city, addressRegion: state },
+        areaServed: { '@type': 'City', name: city },
+      };
+      if (client.gbp_rating && client.gbp_review_count) {
+        localBusiness.aggregateRating = { '@type': 'AggregateRating', ratingValue: client.gbp_rating, reviewCount: client.gbp_review_count };
+      }
+      if (client.gbp_maps_url) localBusiness.sameAs = [client.gbp_maps_url];
+      const svcList = settings?.business_services || [];
+      if (svcList.length > 0) {
+        localBusiness.hasOfferCatalog = {
+          '@type': 'OfferCatalog', name: 'Services',
+          itemListElement: svcList.map(s => ({ '@type': 'Offer', itemOffered: { '@type': 'Service', name: s } })),
+        };
+      }
+      // Extract FAQ from body_html
+      let faqSchema = null;
+      const faqRegex = /<h3[^>]*>([^<]*\?)<\/h3>\s*<p>([\s\S]*?)<\/p>/gi;
+      const faqItems = [];
+      let faqMatch;
+      while ((faqMatch = faqRegex.exec(body_html)) !== null) {
+        faqItems.push({ '@type': 'Question', name: faqMatch[1].trim(), acceptedAnswer: { '@type': 'Answer', text: faqMatch[2].replace(/<[^>]+>/g, '').trim() } });
+      }
+      if (faqItems.length > 0) {
+        faqSchema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqItems };
+      }
+      schemaJson = { localBusiness, faq: faqSchema };
+    }
+
+    const { data: contentItem, error: insertError } = await supabase
+      .from('content_queue')
+      .insert({
+        client_id: clientId,
+        location_id: locationId,
+        title: h1 || title_tag,
+        content_type: dbContentType,
+        status: 'Not Started',
+        title_tag,
+        meta_description: meta_description || null,
+        url_slug: url_slug || null,
+        h1: h1 || null,
+        body_html: body_html || null,
+        schema_json: schemaJson,
+        notes: `Generated ${page_type.replace(/_/g, ' ')}. Keyword: ${target_service || brief.primary_keyword}`,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[generate] insert error:', insertError.message);
+      throw new Error('Failed to save content: ' + insertError.message);
+    }
+
+    // Only update content_status for service pages (not blog/GBP which are extras)
+    if (page_type === 'service_location_page') {
+      await supabase
+        .from('locations')
+        .update({ content_status: 'draft' })
+        .eq('id', locationId);
+    }
+
+    // Auto-create a review task for Pam (only for service location pages, no duplicates)
+    if (page_type === 'service_location_page') {
+      // Look up Pam's profile
+      const { data: pamProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('full_name', '%pam%')
+        .limit(1)
+        .maybeSingle();
+
+      const taskTitle = `Review ${location.location_name} service location page`;
+
+      // Check for an existing open task for this location to avoid duplicates
+      const { data: existingTask } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('title', taskTitle)
+        .not('status', 'eq', 'Complete')
+        .maybeSingle();
+
+      if (!existingTask) {
+        await supabase.from('tasks').insert({
+          client_id: clientId,
+          title: taskTitle,
+          description: `Service location page generated for ${location.location_name}. Primary keyword: ${target_service || brief.primary_keyword}`,
+          status: 'Not Started',
+          priority: 'Medium',
+          assigned_to: pamProfile?.id || null,
+        });
+      }
+    }
+
+    return Response.json({
+      success: true,
+      contentItem,
+      page_type,
+      primary_keyword: target_service || brief.primary_keyword,
+    });
+
+  } catch (err) {
+    console.error('[generate] error:', err.message);
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}

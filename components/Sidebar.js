@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CheckSquare, FileText, Activity,
   Sun, Moon, LogOut, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
@@ -22,7 +22,25 @@ export default function Sidebar() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingTaskCount, setPendingTaskCount] = useState(0);
+  const [prevCount, setPrevCount] = useState(0);
   const supabase = createClient();
+
+  useEffect(() => {
+    async function fetchCount() {
+      const { count } = await supabase
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['Not Started', 'In Progress', 'Pending Client Approval', 'Blocked']);
+      const n = count || 0;
+      if (n > prevCount) setPrevCount(n); // track increases for pulse trigger
+      setPendingTaskCount(n);
+    }
+    fetchCount();
+    // Poll every 60 seconds so the badge stays fresh
+    const interval = setInterval(fetchCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -38,7 +56,8 @@ export default function Sidebar() {
   const w = collapsed ? 64 : 220;
 
   return (
-    <aside style={{
+    <>
+    <aside className="crm-sidebar" style={{
       width: w,
       minWidth: w,
       height: '100vh',
@@ -100,11 +119,13 @@ export default function Sidebar() {
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
+          const isTasksItem = item.href === '/tasks';
+          const showBadge = isTasksItem && pendingTaskCount > 0;
           return (
             <button
               key={item.href}
               onClick={() => router.push(item.href)}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? (isTasksItem && pendingTaskCount > 0 ? `Tasks (${pendingTaskCount} pending)` : item.label) : undefined}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -121,6 +142,7 @@ export default function Sidebar() {
                 fontWeight: active ? 600 : 500,
                 transition: 'all 0.15s ease',
                 marginBottom: 2,
+                position: 'relative',
               }}
               onMouseEnter={(e) => {
                 if (!active) e.currentTarget.style.background = 'var(--bg-hover)';
@@ -129,8 +151,36 @@ export default function Sidebar() {
                 if (!active) e.currentTarget.style.background = 'transparent';
               }}
             >
-              <Icon size={18} />
-              {!collapsed && item.label}
+              {/* Icon — with dot badge when collapsed */}
+              <span style={{ position: 'relative', display: 'flex', flexShrink: 0 }}>
+                <Icon size={18} />
+                {showBadge && collapsed && (
+                  <span style={{
+                    position: 'absolute', top: -4, right: -4,
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: '#ef4444',
+                    animation: 'badge-pulse 2s ease-in-out infinite',
+                  }} />
+                )}
+              </span>
+
+              {/* Label + count badge when expanded */}
+              {!collapsed && (
+                <>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {showBadge && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700,
+                      padding: '2px 7px', borderRadius: 10,
+                      background: '#ef4444', color: 'white',
+                      lineHeight: 1.4,
+                      animation: 'badge-pulse 2s ease-in-out infinite',
+                    }}>
+                      {pendingTaskCount}
+                    </span>
+                  )}
+                </>
+              )}
             </button>
           );
         })}
@@ -183,5 +233,56 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+
+    {/* Mobile bottom nav — shown only on small screens via CSS */}
+    <nav className="crm-bottom-nav">
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const active = isActive(item.href);
+        const isTasksItem = item.href === '/tasks';
+        const showBadge = isTasksItem && pendingTaskCount > 0;
+        return (
+          <button
+            key={item.href}
+            onClick={() => router.push(item.href)}
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 3,
+              background: 'none',
+              border: 'none',
+              borderTop: active ? '2px solid var(--accent)' : '2px solid transparent',
+              color: active ? 'var(--accent)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 10,
+              fontWeight: active ? 600 : 400,
+              padding: '6px 0',
+              minHeight: 'unset',
+              position: 'relative',
+            }}
+          >
+            <span style={{ position: 'relative', display: 'flex' }}>
+              <Icon size={20} />
+              {showBadge && (
+                <span style={{
+                  position: 'absolute', top: -3, right: -6,
+                  fontSize: 9, fontWeight: 700,
+                  padding: '1px 4px', borderRadius: 8,
+                  background: '#ef4444', color: 'white', lineHeight: 1.4,
+                  animation: 'badge-pulse 2s ease-in-out infinite',
+                }}>
+                  {pendingTaskCount > 99 ? '99+' : pendingTaskCount}
+                </span>
+              )}
+            </span>
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+    </>
   );
 }
