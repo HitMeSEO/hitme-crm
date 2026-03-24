@@ -106,11 +106,14 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
       else if (['Not Started', 'In Progress', 'Pending Client Approval'].includes(newStatus)) setFilter('open');
       setSaveMsg(`Task moved to ${newStatus}`);
       setTimeout(() => setSaveMsg(''), 3000);
+      // Collapse the task panel when status changes
+      setExpandedTask(null);
+      setEditForm(null);
     } else {
       setSaveMsg('Changes saved');
       setTimeout(() => setSaveMsg(''), 2000);
+      setExpandedTask({ ...expandedTask, ...updates });
     }
-    setExpandedTask({ ...expandedTask, ...updates });
     await refreshTasks();
   };
 
