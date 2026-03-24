@@ -62,17 +62,19 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
     const updates = isDone
       ? { status: 'Not Started', completed_at: null }
       : { status: 'Done', completed_at: new Date().toISOString() };
-    await supabase.from('tasks').update(updates).eq('id', task.id);
+    const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
+    if (error) { console.error('markDone error:', error); setSaveMsg('Error: ' + error.message); setTimeout(() => setSaveMsg(''), 5000); return; }
     if (expandedTask?.id === task.id) {
       setExpandedTask({ ...task, ...updates });
       setEditForm(f => f ? { ...f, status: updates.status } : f);
     }
-    refreshTasks();
+    await refreshTasks();
   };
 
   const handleEditSave = async () => {
     if (!editForm || !expandedTask) return;
     setEditSaving(true);
+    setSaveMsg('');
     const updates = {
       title: editForm.title.trim() || expandedTask.title,
       description: editForm.description || null,
@@ -87,8 +89,14 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
     if (editForm.status !== 'Done' && expandedTask.status === 'Done') {
       updates.completed_at = null;
     }
-    await supabase.from('tasks').update(updates).eq('id', expandedTask.id);
+    const { error } = await supabase.from('tasks').update(updates).eq('id', expandedTask.id);
     setEditSaving(false);
+    if (error) {
+      console.error('Task save error:', error);
+      setSaveMsg('Error: ' + (error.message || 'Failed to save'));
+      setTimeout(() => setSaveMsg(''), 5000);
+      return;
+    }
     // Auto-switch filter if status moved task out of current view
     const newStatus = editForm.status;
     if (newStatus !== expandedTask.status) {
@@ -103,7 +111,7 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
       setTimeout(() => setSaveMsg(''), 2000);
     }
     setExpandedTask({ ...expandedTask, ...updates });
-    refreshTasks();
+    await refreshTasks();
   };
 
   const handleAddComment = async () => {
@@ -187,8 +195,8 @@ function TasksTab({ tasks, clientId, refreshTasks }) {
           </span>
         </div>
         {saveMsg && (
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#10b981', padding: '4px 10px', background: 'rgba(16,185,129,0.1)', borderRadius: 6 }}>
-            ✓ {saveMsg}
+          <span style={{ fontSize: 12, fontWeight: 600, color: saveMsg.startsWith('Error') ? '#ef4444' : '#10b981', padding: '4px 10px', background: saveMsg.startsWith('Error') ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', borderRadius: 6 }}>
+            {saveMsg.startsWith('Error') ? '✗' : '✓'} {saveMsg}
           </span>
         )}
         <button onClick={() => setShowAddForm(!showAddForm)} style={{
