@@ -1,9 +1,13 @@
 // /app/api/content/push-schema/route.js
-// Injects schema markup into an EXISTING WordPress page without touching the body content.
-// 1. Fetches current page content from WordPress
-// 2. Strips any existing JSON-LD schema scripts
-// 3. Appends fresh schema from content_queue.schema_json
-// 4. PUTs updated content back to WordPress
+// Pushes schema markup to WordPress pages via custom meta field.
+//
+// Strategy: Instead of injecting <script> tags into post content (which WP strips),
+// we store the full JSON-LD schema array in a custom post meta field `_hitme_schema`.
+// A companion mu-plugin on the WordPress side reads this field and renders the
+// JSON-LD script tags in the <head> via wp_head action.
+//
+// Additionally, strips any previously-injected JSON-LD from the post content body
+// (cleanup from the old approach).
 //
 // POST body: { content_id, client_id }
 // Optional: { bulk: true } to push schema to ALL published pages for a client
@@ -66,67 +70,60 @@ export async function POST(request) {
       try {
         const wpPostId = item.wordpress_post_id;
 
-        // Step 1: Fetch current page content from WordPress
-        const getRes = await fetch(`${wpUrl}/wp-json/wp/v2/pages/${wpPostId}`, {
-          headers: { 'Authorization': authHeader },
-        });
-
-        if (!getRes.ok) {
-          results.push({ id: item.id, title: item.title, status: 'error', message: `WP fetch failed (${getRes.status})` });
-          continue;
-        }
-
-        const wpPage = await getRes.json();
-        let currentContent = wpPage.content?.rendered || wpPage.content?.raw || '';
-
-        // If we can't get raw content, try fetching with context=edit
-        if (!wpPage.content?.raw) {
-          const editRes = await fetch(`${wpUrl}/wp-json/wp/v2/pages/${wpPostId}?context=edit`, {
-            headers: { 'Authorization': authHeader },
-          });
-          if (editRes.ok) {
-            const editPage = await editRes.json();
-            currentContent = editPage.content?.raw || currentContent;
-          }
-        }
-
-        // Step 2: Strip any existing JSON-LD schema scripts from the content
-        const strippedContent = currentContent.replace(/<script\s+type="application\/ld\+json"[\s\S]*?<\/script>/gi, '').trimEnd();
-
-        // Step 3: Build fresh schema script tags from new structure
-        const schemaTags = [];
+        // Build the schema array from the structured schema_json
+        const schemaBlocks = [];
         if (item.schema_json.service) {
-          schemaTags.push(`<script type="application/ld+json">${JSON.stringify(item.schema_json.service)}</script>`);
+          schemaBlocks.push(item.schema_json.service);
         }
         if (item.schema_json.breadcrumb) {
-          schemaTags.push(`<script type="application/ld+json">${JSON.stringify(item.schema_json.breadcrumb)}</script>`);
+          schemaBlocks.push(item.schema_json.breadcrumb);
         }
         if (item.schema_json.faq) {
-          schemaTags.push(`<script type="application/ld+json">${JSON.stringify(item.schema_json.faq)}</script>`);
+          schemaBlocks.push(item.schema_json.faq);
         }
         if (item.schema_json.webpage) {
-          schemaTags.push(`<script type="application/ld+json">${JSON.stringify(item.schema_json.webpage)}</script>`);
+          schemaBlocks.push(item.schema_json.webpage);
         }
         // Backward compat: support old localBusiness key
         if (!item.schema_json.service && item.schema_json.localBusiness) {
-          schemaTags.push(`<script type="application/ld+json">${JSON.stringify(item.schema_json.localBusiness)}</script>`);
+          schemaBlocks.push(item.schema_json.localBusiness);
         }
 
-        if (schemaTags.length === 0) {
+        if (schemaBlocks.length === 0) {
           results.push({ id: item.id, title: item.title, status: 'skipped', message: 'No schema data' });
           continue;
         }
 
-        // Step 4: Append schema to content and PUT back
-        const updatedContent = strippedContent + '\n' + schemaTags.join('\n');
+        // Also clean up any old JSON-LD that was injected into content body (legacy approach)
+        // Fetch current content to check for old scripts
+        let contentUpdate = {};
+        const getRes = await fetch(`${wpUrl}/wp-json/wp/v2/pages/${wpPostId}?context=edit`, {
+          headers: { 'Authorization': authHeader },
+        });
 
+        if (getRes.ok) {
+          const wpPage = await getRes.json();
+          const rawContent = wpPage.content?.raw || '';
+          // Strip any old JSON-LD scripts from body content
+          const stripped = rawContent.replace(/<script\s+type="application\/ld\+json"[\s\S]*?<\/script>/gi, '').trimEnd();
+          if (stripped !== rawContent) {
+            contentUpdate = { content: stripped };
+          }
+        }
+
+        // Push schema as meta field + clean up content if needed
         const putRes = await fetch(`${wpUrl}/wp-json/wp/v2/pages/${wpPostId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
-          body: JSON.stringify({ content: updatedContent }),
+          body: JSON.stringify({
+            ...contentUpdate,
+            meta: {
+              _hitme_schema: JSON.stringify(schemaBlocks),
+            },
+          }),
         });
 
         if (!putRes.ok) {
@@ -142,7 +139,7 @@ export async function POST(request) {
           title: item.title,
           status: 'success',
           wordpress_post_id: wpPostId,
-          schemas_injected: schemaTags.length,
+          schemas_injected: schemaBlocks.length,
         });
 
       } catch (itemErr) {

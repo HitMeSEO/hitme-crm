@@ -80,9 +80,58 @@
 - ✅ Auto-marks image as "used for GBP" when attached to a post
 - ✅ Image thumbnail shows on content row for posts with attached images
 
-## Still To Build
+## DONE 2026-03-23 (Session 5 — Schema Markup System)
+- ✅ Schema generation engine: Service, BreadcrumbList, FAQPage, WebPage per page
+- ✅ `extractServiceAndArea()` parser handles 5 title formats (City State Service, Service in City State, etc.)
+- ✅ Image schema support: Service.image + WebPage.primaryImageOfPage for unique image-to-page binding
+- ✅ serviceType field for extra page uniqueness signal
+- ✅ Schema preview endpoint (`/api/content/preview-schema`): bulk or single-page preview with warnings
+- ✅ Schema generate endpoint (`/api/content/schema`): saves schema_json to content_queue
+- ✅ Push-schema endpoint (`/api/content/push-schema`): writes to WP `_hitme_schema` meta field via REST API
+- ✅ Publish endpoint (`/api/content/publish`): WebPage schema included in new page creation
+- ✅ WordPress mu-plugin created (`scripts/hitme-schema-output.php`): reads meta field → renders JSON-LD in `<head>`
+- ✅ WP credentials verified for charlottesbestroofing.com (user: webdev, Application Password)
+- ✅ 2 test content_queue records created linked to real WP pages (Ballantyne ID 11731, Mooresville ID 11723)
+- ✅ Schema preview tested live: correct service names, areas, FAQ extraction, provider rating
+- ✅ image_url + image_file_id columns migrated on content_queue table
+- ✅ Old JSON-LD stripped from both test pages (WP content sanitization issue discovered + fixed)
+- ✅ Yoast SEO coexistence confirmed (our schema goes alongside Yoast's @graph output)
+
+## DONE 2026-03-24 (Session 6 — Google Map Embeds + Schema Fixes)
+- ✅ Google Map embed system built (`lib/map-embed.js`): GBP listing embed using place_id + search fallback
+- ✅ Maps Embed API enabled in Google Cloud Console (free, no usage fees)
+- ✅ Map embed auto-appended to service location pages at bottom of body_html during content generation
+- ✅ Publish route updated: appends map embed to existing pages if not already present
+- ✅ Publish route fixed: schema no longer injected into content body (WP strips <script> tags); now uses `_hitme_schema` meta field
+- ✅ Both embed modes tested live on Charlotte's Best Roofing: place_id mode (exact GBP pin) + search mode (service area cities)
+- ✅ Embed shows: business name, address, 5.0★ rating, 224 reviews, directions button, "View on Google Maps" link
+- ✅ Responsive iframe with 16:9 aspect ratio, rounded corners, shadow, "Our Service Area" header
+
+## DONE 2026-03-24 (Session 7 — Editable GBP Post Tracker)
+- ✅ Post Tracker section in GBP Health tab now fully editable (was static placeholder)
+- ✅ Date picker for "Last Post" field — saves to `gbp_last_post_date` on clients table
+- ✅ "Days Since Post" auto-calculates from last post date with color coding (green ≤7d, yellow ≤14d, red >14d)
+- ✅ Post Frequency selector: daily, 3x/week, 2x/week, weekly, biweekly, monthly
+- ✅ Overdue warning banner when days since post exceeds target frequency
+- ✅ Auto-save on change with "Saving..." / "✓ Saved" feedback
+- ⚠️ SQL MIGRATION NEEDED (run in Supabase SQL Editor):
+  - `ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS gbp_last_post_date DATE;`
+  - `ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS gbp_post_frequency TEXT DEFAULT 'weekly';`
+- ⚠️ DEPLOY NEEDED: `cd ~/Desktop/hitme-crm-app && npm run build && npx vercel --prod --yes`
+
+## Upcoming — Needs Action
+### Immediate (blocked on deploy + client authorization)
+1. **Git push** — run `git push origin main` to deploy schema system + push-schema fix to Vercel
+2. **Client authorization** — get Charlotte's Best Roofing's OK to install the mu-plugin on their WP site
+3. **Install mu-plugin** — Kevin/someone with FTP access uploads `scripts/hitme-schema-output.php` to `wp-content/mu-plugins/` on charlottesbestroofing.com
+4. **Re-push schema + validate** — once mu-plugin is installed, push schema and test with Google Rich Results Test
+5. **Research route timeout** — Kevin needs to retest Fort Mill, SC after deploy (maxDuration=300 code ready)
+
+### Next Features
 - In-app help/guide page (Tim mentioned as option, not yet prioritized)
-- Research route timeout: maxDuration=300 code saved, Kevin needs to retest Fort Mill, SC after deploy
+- Schema UI in Content tab — Preview Schema / Push Schema buttons per content item
+- Bulk schema push across all client pages with progress feedback
+- Image attachment workflow — pick unique image per page before schema push
 
 ## Phase 3: Site Link Audit (crawl client website)
 - Extend audit route to GET page HTML instead of just HEAD

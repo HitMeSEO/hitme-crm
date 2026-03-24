@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getAccessToken } from '@/lib/google-auth';
+import { buildMapEmbedForContent } from '@/lib/map-embed';
 
 export async function POST(request) {
   try {
@@ -26,12 +27,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Content must have a title tag and body HTML before publishing' }, { status: 400 });
     }
 
-    // Get client settings for WP credentials
-    const { data: settings } = await supabase
-      .from('client_settings')
-      .select('wordpress_url, wordpress_api_key')
-      .eq('client_id', client_id)
-      .maybeSingle();
+    // Get client + settings + location in parallel
+    const [
+      { data: client },
+      { data: settings },
+      locationResult,
+    ] = await Promise.all([
+      supabase.from('clients').select('*').eq('id', client_id).single(),
+      supabase.from('client_settings').select('wordpress_url, wordpress_api_key').eq('client_id', client_id).maybeSingle(),
+      content.location_id
+        ? supabase.from('locations').select('*').eq('id', content.location_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const location = locationResult?.data || null;
 
     if (!settings?.wordpress_url || !settings?.wordpress_api_key) {
       return NextResponse.json({ error: 'WordPress credentials not configured. Go to Edit Client to add them.' }, { status: 400 });
@@ -39,34 +48,31 @@ export async function POST(request) {
 
     const wpUrl = settings.wordpress_url.replace(/\/+$/, '');
     const apiKey = settings.wordpress_api_key;
-
-    // Build the WP REST API request
-    // apiKey format is "username:application_password"
     const authHeader = 'Basic ' + Buffer.from(apiKey).toString('base64');
 
-    // Inject schema markup into body HTML before publishing
+    // Build publish HTML: body content + map embed (if not already present)
     let publishHtml = content.body_html;
+
+    // Append Google Map embed if not already in the content
+    if (client && !publishHtml.includes('google.com/maps/embed')) {
+      const mapEmbed = buildMapEmbedForContent(client, location, content.content_type);
+      if (mapEmbed) {
+        publishHtml = publishHtml + '\n' + mapEmbed;
+      }
+    }
+
+    // Note: Schema is now handled via _hitme_schema meta field (push-schema route),
+    // NOT injected into page content. WordPress strips <script> tags from content.
+
+    // Build schema blocks for the meta field (if schema_json exists)
+    const schemaBlocks = [];
     if (content.schema_json) {
-      const schemas = [];
-      // New structure: service, breadcrumb, faq
-      if (content.schema_json.service) {
-        schemas.push(`<script type="application/ld+json">${JSON.stringify(content.schema_json.service)}</script>`);
-      }
-      if (content.schema_json.breadcrumb) {
-        schemas.push(`<script type="application/ld+json">${JSON.stringify(content.schema_json.breadcrumb)}</script>`);
-      }
-      if (content.schema_json.faq) {
-        schemas.push(`<script type="application/ld+json">${JSON.stringify(content.schema_json.faq)}</script>`);
-      }
-      if (content.schema_json.webpage) {
-        schemas.push(`<script type="application/ld+json">${JSON.stringify(content.schema_json.webpage)}</script>`);
-      }
-      // Backward compat: old localBusiness key
+      if (content.schema_json.service) schemaBlocks.push(content.schema_json.service);
+      if (content.schema_json.breadcrumb) schemaBlocks.push(content.schema_json.breadcrumb);
+      if (content.schema_json.faq) schemaBlocks.push(content.schema_json.faq);
+      if (content.schema_json.webpage) schemaBlocks.push(content.schema_json.webpage);
       if (!content.schema_json.service && content.schema_json.localBusiness) {
-        schemas.push(`<script type="application/ld+json">${JSON.stringify(content.schema_json.localBusiness)}</script>`);
-      }
-      if (schemas.length > 0) {
-        publishHtml = publishHtml + '\n' + schemas.join('\n');
+        schemaBlocks.push(content.schema_json.localBusiness);
       }
     }
 
@@ -75,10 +81,15 @@ export async function POST(request) {
       content: publishHtml,
       status: 'publish',
       slug: content.url_slug ? content.url_slug.replace(/^\/+|\/+$/g, '') : undefined,
+      // Store schema in meta field for the mu-plugin to render in <head>
+      ...(schemaBlocks.length > 0 ? {
+        meta: {
+          _hitme_schema: JSON.stringify(schemaBlocks),
+        },
+      } : {}),
     };
 
-    // If meta_description exists, try to set it via Yoast/RankMath meta
-    // We'll add it as an excerpt which most themes display
+    // Add meta description as excerpt
     if (content.meta_description) {
       wpBody.excerpt = content.meta_description;
     }
@@ -90,7 +101,7 @@ export async function POST(request) {
       : `${wpUrl}/wp-json/wp/v2/pages`;
 
     const wpRes = await fetch(endpoint, {
-      method: method === 'PUT' ? 'PUT' : 'POST',
+      method,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': authHeader,
@@ -157,6 +168,8 @@ export async function POST(request) {
       url: publishedUrl,
       wordpress_post_id: wpData.id,
       indexed: !!indexingResult,
+      has_map: publishHtml.includes('google.com/maps/embed'),
+      has_schema: schemaBlocks.length > 0,
     });
 
   } catch (err) {

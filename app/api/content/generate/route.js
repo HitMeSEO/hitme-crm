@@ -4,6 +4,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { buildMapEmbedForContent } from '@/lib/map-embed';
 
 export const maxDuration = 120;
 
@@ -324,11 +325,15 @@ export async function POST(request) {
       throw new Error('Claude returned invalid JSON: ' + parseErr.message);
     }
 
-    const { title_tag, meta_description, h1, url_slug, body_html } = generated;
+    const { title_tag, meta_description, h1, url_slug, body_html: rawBodyHtml } = generated;
 
-    if (!title_tag || !body_html) {
+    if (!title_tag || !rawBodyHtml) {
       throw new Error('Claude response missing required fields (title_tag, body_html)');
     }
+
+    // Append Google Map embed to service location pages (bottom of content)
+    const mapEmbed = buildMapEmbedForContent(client, location, page_type);
+    const body_html = mapEmbed ? rawBodyHtml + '\n' + mapEmbed : rawBodyHtml;
 
     // Auto-generate schema for service location pages
     let schemaJson = null;

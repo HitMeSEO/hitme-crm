@@ -63,6 +63,10 @@ export default function GbpHealthTab({ client, setClient, clientId }) {
   const [notes, setNotes] = useState(client.gbp_health_notes || '');
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
+  const [lastPostDate, setLastPostDate] = useState(client.gbp_last_post_date || '');
+  const [postFrequency, setPostFrequency] = useState(client.gbp_post_frequency || 'weekly');
+  const [postSaving, setPostSaving] = useState(false);
+  const [postSaved, setPostSaved] = useState(false);
 
   useEffect(() => {
     if (client.gbp_action_checklist) {
@@ -73,7 +77,19 @@ export default function GbpHealthTab({ client, setClient, clientId }) {
       );
     }
     setNotes(client.gbp_health_notes || '');
+    setLastPostDate(client.gbp_last_post_date || '');
+    setPostFrequency(client.gbp_post_frequency || 'weekly');
   }, [client.id]);
+
+  const savePostTracker = useCallback(async (dateVal, freqVal) => {
+    setPostSaving(true);
+    const updates = { gbp_last_post_date: dateVal || null, gbp_post_frequency: freqVal || 'weekly' };
+    await supabase.from('clients').update(updates).eq('id', clientId);
+    setClient(prev => ({ ...prev, ...updates }));
+    setPostSaving(false);
+    setPostSaved(true);
+    setTimeout(() => setPostSaved(false), 2000);
+  }, [clientId]);
 
   const toggleCheck = async (key) => {
     const updated = { ...checklist, [key]: !checklist[key] };
@@ -299,22 +315,85 @@ export default function GbpHealthTab({ client, setClient, clientId }) {
             )}
           </div>
 
-          {/* Post Tracker placeholder */}
-          <div style={{ ...card, borderStyle: 'dashed' }}>
-            <div style={sectionTitle}>Post Tracker</div>
+          {/* Post Tracker — editable */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={sectionTitle}>Post Tracker</div>
+              {(postSaving || postSaved) && (
+                <span style={{ fontSize: 11, color: postSaved ? '#10b981' : 'var(--text-muted)' }}>
+                  {postSaving ? 'Saving...' : '✓ Saved'}
+                </span>
+              )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--bg-tertiary)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Last Post</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>Unknown</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Last Post</div>
+                <input
+                  type="date"
+                  value={lastPostDate}
+                  onChange={e => {
+                    setLastPostDate(e.target.value);
+                    savePostTracker(e.target.value, postFrequency);
+                  }}
+                  style={{
+                    width: '100%', padding: '6px 8px', borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--bg-card)',
+                    color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                />
               </div>
               <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--bg-tertiary)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Days Since Post</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>—</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Days Since Post</div>
+                {(() => {
+                  if (!lastPostDate) return <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-muted)' }}>—</div>;
+                  const days = Math.floor((Date.now() - new Date(lastPostDate + 'T00:00:00').getTime()) / 86400000);
+                  const color = days <= 7 ? '#10b981' : days <= 14 ? '#f59e0b' : '#ef4444';
+                  return <div style={{ fontSize: 20, fontWeight: 700, color }}>{days < 0 ? 0 : days}</div>;
+                })()}
               </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: 6, lineHeight: 1.5 }}>
-              🔌 Connect GBP API to track posts automatically. Pending API approval.
+            <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--bg-tertiary)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Post Frequency</div>
+              <select
+                value={postFrequency}
+                onChange={e => {
+                  setPostFrequency(e.target.value);
+                  savePostTracker(lastPostDate, e.target.value);
+                }}
+                style={{
+                  width: '100%', padding: '6px 8px', borderRadius: 6,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                  boxSizing: 'border-box', cursor: 'pointer',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              >
+                <option value="daily">Daily</option>
+                <option value="3x_week">3x per week</option>
+                <option value="2x_week">2x per week</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
             </div>
+            {lastPostDate && (() => {
+              const days = Math.floor((Date.now() - new Date(lastPostDate + 'T00:00:00').getTime()) / 86400000);
+              const freqDays = { daily: 1, '3x_week': 3, '2x_week': 4, weekly: 7, biweekly: 14, monthly: 30 };
+              const threshold = freqDays[postFrequency] || 7;
+              const overdue = days > threshold;
+              if (overdue) {
+                return (
+                  <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: '#ef4444', padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 6, border: '1px solid rgba(239,68,68,0.2)' }}>
+                    ⚠ Overdue — last posted {days} days ago (target: every {threshold} days)
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         </div>
       </div>
