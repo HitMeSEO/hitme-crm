@@ -810,7 +810,7 @@ export default function ClientDetailPage() {
       {tab === 'services' && <ServicesTab client={client} setClient={setClient} clientId={id} />}
       {tab === 'tasks' && <TasksTab tasks={tasks} clientId={id} refreshTasks={refreshTasks} />}
       {tab === 'content' && <ContentTab content={content} client={client} clientId={id} refreshContent={refreshContent} setClient={setClient} clientSettings={clientSettings} />}
-      {tab === 'notes' && <NotesTab activities={activities} clientId={id} refreshActivities={refreshActivities} />}
+      {tab === 'notes' && <NotesTab activities={activities} clientId={id} refreshActivities={refreshActivities} clientName={client.company_name} />}
       {tab === 'gbp_health' && <GbpHealthTab client={client} setClient={setClient} clientId={id} />}
       {tab === 'images' && <ImagesTab clientId={id} />}
       {tab === 'seo_audit' && <SeoAuditTab clientId={id} client={client} setClient={setClient} />}

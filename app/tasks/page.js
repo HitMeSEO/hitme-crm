@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import AppShell from '@/components/AppShell';
 import { TASK_STATUS_COLORS, TASK_STATUSES, TASK_PRIORITIES, PRIORITY_COLORS } from '@/lib/constants';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, CheckSquare, Square } from 'lucide-react';
 
 export default function TasksPage() {
   const router = useRouter();
@@ -75,6 +75,16 @@ export default function TasksPage() {
     if (!id) return '—';
     const m = teamMembers.find(t => t.id === id);
     return m ? `${m.first_name} ${m.last_name}` : '—';
+  };
+
+  const toggleDone = async (e, task) => {
+    e.stopPropagation();
+    const newStatus = task.status === 'Done' ? 'Not Started' : 'Done';
+    const updates = { status: newStatus };
+    if (newStatus === 'Done') updates.completed_at = new Date().toISOString();
+    else updates.completed_at = null;
+    await supabase.from('tasks').update(updates).eq('id', task.id);
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
   };
 
   const getStatusColor = (status) => TASK_STATUS_COLORS[status] || '#64748b';
@@ -212,6 +222,7 @@ export default function TasksPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
+                  <th style={{ width: 44, padding: '12px 8px 12px 16px' }}></th>
                   <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Task</th>
                   <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Client</th>
                   <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status</th>
@@ -233,7 +244,14 @@ export default function TasksPage() {
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{task.title}</td>
+                    <td style={{ padding: '12px 8px 12px 16px', width: 44 }}>
+                      <button onClick={(e) => toggleDone(e, task)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}>
+                        {task.status === 'Done'
+                          ? <CheckSquare size={18} style={{ color: '#10b981' }} />
+                          : <Square size={18} style={{ color: 'var(--text-muted)' }} />}
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: 13, color: task.status === 'Done' ? 'var(--text-muted)' : 'var(--text-primary)', fontWeight: 500, textDecoration: task.status === 'Done' ? 'line-through' : 'none' }}>{task.title}</td>
                     <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{task.clients?.company_name || '—'}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
