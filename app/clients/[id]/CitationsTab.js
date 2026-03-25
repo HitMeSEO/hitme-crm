@@ -1,13 +1,21 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Building2, RefreshCw, Play, Loader2, Check, AlertTriangle, X, Filter } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Building2, RefreshCw, Play, Loader2, Check, AlertTriangle, X, Filter, ChevronDown } from 'lucide-react';
 
 const STATUS_CFG = {
   found_correct: { label: 'Correct', color: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: 'rgba(22,163,74,0.2)' },
   found_inconsistent: { label: 'Inconsistent', color: '#ca8a04', bg: 'rgba(202,138,4,0.08)', border: 'rgba(202,138,4,0.2)' },
   not_found: { label: 'Missing', color: '#dc2626', bg: 'rgba(220,38,38,0.08)', border: 'rgba(220,38,38,0.2)' },
 };
+
+const TRACKING_STEPS = [
+  { key: 'not_listed', label: 'Not Listed', color: '#94a3b8', bg: '#f1f5f9' },
+  { key: 'submitted', label: 'Submitted', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+  { key: 'claimed', label: 'Claimed', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+  { key: 'verified', label: 'Verified', color: '#16a34a', bg: 'rgba(22,163,74,0.1)' },
+];
 
 const SCORE_COLOR = (s) => s >= 75 ? '#16a34a' : s >= 55 ? '#ca8a04' : s >= 35 ? '#ea580c' : '#dc2626';
 
@@ -21,9 +29,55 @@ function NapDot({ match, label }) {
   );
 }
 
-function CitationRow({ citation }) {
+function TrackingDropdown({ citation, onUpdate }) {
+  const [updating, setUpdating] = useState(false);
+  const current = TRACKING_STEPS.find(s => s.key === (citation.tracking_status || 'not_listed')) || TRACKING_STEPS[0];
+
+  const handleChange = async (e) => {
+    const newStatus = e.target.value;
+    setUpdating(true);
+    try {
+      const supabase = createClient();
+      await supabase.from('citations').update({
+        tracking_status: newStatus,
+        tracked_at: new Date().toISOString(),
+      }).eq('id', citation.id);
+      onUpdate(citation.id, newStatus);
+    } catch (err) {
+      console.error('Failed to update tracking:', err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <select
+        value={citation.tracking_status || 'not_listed'}
+        onChange={handleChange}
+        disabled={updating}
+        style={{
+          appearance: 'none', WebkitAppearance: 'none',
+          fontSize: 11, fontWeight: 600, padding: '3px 22px 3px 8px',
+          borderRadius: 6, border: `1px solid ${current.color}40`,
+          background: current.bg, color: current.color,
+          cursor: 'pointer', outline: 'none',
+          opacity: updating ? 0.5 : 1,
+        }}
+      >
+        {TRACKING_STEPS.map(s => (
+          <option key={s.key} value={s.key}>{s.label}</option>
+        ))}
+      </select>
+      <ChevronDown size={10} style={{ position: 'absolute', right: 6, pointerEvents: 'none', color: current.color }} />
+    </div>
+  );
+}
+
+function CitationRow({ citation, onTrackingUpdate }) {
   const [open, setOpen] = useState(citation.status === 'found_inconsistent');
   const cfg = STATUS_CFG[citation.status] || STATUS_CFG.not_found;
+  const showTracking = citation.status === 'not_found' || citation.status === 'found_inconsistent';
 
   return (
     <div style={{ borderRadius: 8, border: `1px solid ${cfg.border}`, background: cfg.bg, transition: 'all 0.2s' }}>
@@ -43,12 +97,15 @@ function CitationRow({ citation }) {
             {citation.category}
           </span>
         </span>
-        <span style={{
-          fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
-          color: cfg.color, border: `1px solid ${cfg.border}`,
-        }}>
-          {cfg.label}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+          {showTracking && <TrackingDropdown citation={citation} onUpdate={onTrackingUpdate} />}
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+            color: cfg.color, border: `1px solid ${cfg.border}`,
+          }}>
+            {cfg.label}
+          </span>
+        </div>
       </button>
 
       {open && (
@@ -71,6 +128,11 @@ function CitationRow({ citation }) {
             )}
             {citation.notes && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>{citation.notes}</p>
+            )}
+            {citation.tracked_at && (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                Last updated: {new Date(citation.tracked_at).toLocaleDateString()}
+              </p>
             )}
             {/* Action buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
@@ -132,6 +194,18 @@ export default function CitationsTab({ clientId }) {
 
   useEffect(() => { fetchAudit().finally(() => setLoading(false)); }, [fetchAudit]);
 
+  const handleTrackingUpdate = (citationId, newStatus) => {
+    setAudit(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        citations: prev.citations.map(c =>
+          c.id === citationId ? { ...c, tracking_status: newStatus, tracked_at: new Date().toISOString() } : c
+        ),
+      };
+    });
+  };
+
   const runAudit = async () => {
     setRunning(true);
     setCurrentStep(0);
@@ -167,6 +241,15 @@ export default function CitationsTab({ clientId }) {
   const citations = audit?.citations || [];
   const filtered = filter === 'all' ? citations : citations.filter(c => c.status === filter);
 
+  // Tracking summary counts
+  const trackingCounts = {
+    not_listed: citations.filter(c => (c.status === 'not_found' || c.status === 'found_inconsistent') && (!c.tracking_status || c.tracking_status === 'not_listed')).length,
+    submitted: citations.filter(c => c.tracking_status === 'submitted').length,
+    claimed: citations.filter(c => c.tracking_status === 'claimed').length,
+    verified: citations.filter(c => c.tracking_status === 'verified').length,
+  };
+  const hasTrackingActivity = trackingCounts.submitted + trackingCounts.claimed + trackingCounts.verified > 0;
+
   const btnStyle = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border)',
@@ -174,7 +257,7 @@ export default function CitationsTab({ clientId }) {
     cursor: 'pointer', transition: 'opacity 0.15s',
   };
 
-  const filterBtn = (key, label) => ({
+  const filterBtn = (key) => ({
     padding: '4px 10px', borderRadius: 99, border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer',
     background: filter === key ? 'var(--accent)' : 'var(--bg-tertiary)',
     color: filter === key ? '#fff' : 'var(--text-muted)',
@@ -283,6 +366,31 @@ export default function CitationsTab({ clientId }) {
         )}
       </div>
 
+      {/* Tracking progress card */}
+      {hasAudit && (trackingCounts.not_listed > 0 || hasTrackingActivity) && (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: 12 }}>Citation Building Progress</span>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {TRACKING_STEPS.map(s => {
+              const count = trackingCounts[s.key] || 0;
+              if (count === 0 && s.key === 'not_listed') return null;
+              return (
+                <div key={s.key} style={{
+                  flex: 1, minWidth: 120, padding: 14, borderRadius: 8,
+                  background: s.bg, border: `1px solid ${s.color}30`, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{count}</div>
+                  <div style={{ fontSize: 11, color: s.color, fontWeight: 500 }}>{s.label}</div>
+                </div>
+              );
+            })}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
+            Use the dropdown on each Missing or Inconsistent citation to track your progress: Not Listed → Submitted → Claimed → Verified
+          </p>
+        </div>
+      )}
+
       {/* Citations list */}
       {hasAudit && (
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20 }}>
@@ -290,21 +398,21 @@ export default function CitationsTab({ clientId }) {
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Directory Listings</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <Filter size={12} style={{ color: 'var(--text-muted)', marginRight: 4 }} />
-              <button onClick={() => setFilter('all')} style={filterBtn('all', 'All')}>All</button>
-              <button onClick={() => setFilter('found_correct')} style={filterBtn('found_correct', 'Correct')}>
+              <button onClick={() => setFilter('all')} style={filterBtn('all')}>All</button>
+              <button onClick={() => setFilter('found_correct')} style={filterBtn('found_correct')}>
                 Correct ({citations.filter(c => c.status === 'found_correct').length})
               </button>
-              <button onClick={() => setFilter('found_inconsistent')} style={filterBtn('found_inconsistent', 'Issues')}>
+              <button onClick={() => setFilter('found_inconsistent')} style={filterBtn('found_inconsistent')}>
                 Issues ({citations.filter(c => c.status === 'found_inconsistent').length})
               </button>
-              <button onClick={() => setFilter('not_found')} style={filterBtn('not_found', 'Missing')}>
+              <button onClick={() => setFilter('not_found')} style={filterBtn('not_found')}>
                 Missing ({citations.filter(c => c.status === 'not_found').length})
               </button>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {filtered.map(c => <CitationRow key={c.id} citation={c} />)}
+            {filtered.map(c => <CitationRow key={c.id} citation={c} onTrackingUpdate={handleTrackingUpdate} />)}
             {filtered.length === 0 && (
               <p style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>No citations match this filter.</p>
             )}
