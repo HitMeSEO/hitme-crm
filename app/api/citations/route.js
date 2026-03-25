@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // Directory registry
 const CORE_DIRECTORIES = [
@@ -114,18 +114,20 @@ function getDirectories(client) {
   return dirs;
 }
 
-const SYSTEM_PROMPT = `You are a local SEO citation expert analyzing NAP (Name, Address, Phone) consistency across business directories.
+const SYSTEM_PROMPT = `You are a local SEO citation expert. You will search the web to verify whether a business has listings on specific directories.
 
-You will be given a business's correct NAP and a list of directories. Assess whether they are likely listed on each directory and whether NAP is consistent.
+For each directory, use web_search to search for the business listing. Search examples:
+- "Beckett Siteworx BBB" to check BBB
+- "Beckett Siteworx Yelp Anderson CA" to check Yelp
 
-Return ONLY valid JSON. No markdown, no backticks, no explanation.
+After searching, return ONLY valid JSON with your findings. No markdown, no backticks, no explanation text.
 
 Return this structure:
 {
   "citations": [
     {
       "directory": "<directory key>",
-      "status": "found_correct" | "found_inconsistent" | "not_found" | "unknown",
+      "status": "found_correct" | "found_inconsistent" | "not_found",
       "name_match": true | false | null,
       "address_match": true | false | null,
       "phone_match": true | false | null,
@@ -134,21 +136,18 @@ Return this structure:
       "found_address": "<address found or null>",
       "found_phone": "<phone found or null>",
       "found_url": "<url found or null>",
-      "listing_url": "<likely listing URL or null>",
+      "listing_url": "<actual URL of listing found, or null>",
       "notes": "<brief note>"
     }
   ]
 }
 
 Rules:
-- "found_correct": Business is likely listed with matching NAP
-- "found_inconsistent": Listed but NAP has discrepancies (old address, wrong phone, abbreviations, etc.)
-- "not_found": Business is definitely NOT listed — only use this for directories that require explicit signup and you have strong reason to believe they never signed up
-- "unknown": You are not sure whether they are listed — USE THIS instead of "not_found" when uncertain
-- CRITICAL: Most established businesses (1+ year old, BBB accredited, active Google listing) ARE listed on major directories like Google, Yelp, BBB, Facebook, Bing, Apple Maps. Default to "found_correct" or "unknown" for these — NEVER mark a likely-listed business as "not_found" on major directories.
-- For BBB specifically: if the business is in a trade/service industry with employees, they are very likely BBB listed. Mark as "found_correct" unless you have specific reason to believe otherwise.
-- For "listing_url": construct the most likely URL if you can (e.g., yelp.com/biz/company-name-city)
-- Be conservative: when in doubt, mark "unknown" rather than "not_found"`;
+- "found_correct": You found their listing and NAP matches
+- "found_inconsistent": You found their listing but NAP has issues
+- "not_found": You searched and could not find a listing
+- ALWAYS provide the actual listing_url when you find one (the real profile page URL)
+- Search each directory — do not guess`;
 
 // GET — fetch latest audit for a client
 export async function GET(request) {
@@ -193,7 +192,7 @@ export async function POST(request) {
   if (clientErr || !client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
   const directories = getDirectories(client);
-  const batchSize = 5;
+  const batchSize = 3; // Smaller batches since web search takes longer per directory
   const totalSteps = Math.ceil(directories.length / batchSize);
 
   // Step 0: create audit
@@ -227,20 +226,68 @@ export async function POST(request) {
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const msg = await anthropic.messages.create({
+    const userPrompt = `${context}\n\nSearch for this business on each of these directories and verify their listing:\n${dirList}\n\nSearch each one, then return JSON with one entry per directory. Include the actual listing URL for any listings you find.`;
+
+    const DEADLINE = Date.now() + 100000; // 100s budget (leave 20s buffer)
+
+    let response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 3000,
+      max_tokens: 4000,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `${context}\n\nCheck these directories:\n${dirList}\n\nReturn JSON with one entry per directory.` }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
-    let text = msg.content
+    let messages = [
+      { role: 'user', content: userPrompt },
+      { role: 'assistant', content: response.content },
+    ];
+
+    let rounds = 0;
+    const maxRounds = 8;
+
+    while (response.stop_reason === 'tool_use' && rounds < maxRounds) {
+      if (Date.now() > DEADLINE) {
+        console.warn('[citations] Approaching timeout after', rounds, 'rounds. Forcing final answer.');
+        messages.push({ role: 'user', content: [{ type: 'text', text: 'TIME LIMIT. Stop searching and return the JSON now with whatever you have found so far.' }] });
+        response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5-20250929',
+          max_tokens: 4000,
+          messages,
+        });
+        break;
+      }
+
+      rounds++;
+      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
+      const toolResults = toolUseBlocks.map(block => ({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: 'Search completed. Continue checking remaining directories, then return the JSON.',
+      }));
+
+      messages.push({ role: 'user', content: toolResults });
+
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 4000,
+        system: SYSTEM_PROMPT,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages,
+      });
+
+      messages.push({ role: 'assistant', content: response.content });
+    }
+
+    console.log('[citations] Completed in', rounds, 'search rounds');
+
+    // Extract JSON from final response
+    let text = response.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('\n')
-      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      .replace(/^```json?\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
 
-    // Find JSON in response if surrounded by text
     if (!text.startsWith('{')) {
       const jsonStart = text.indexOf('{');
       const jsonEnd = text.lastIndexOf('}');
@@ -290,10 +337,7 @@ export async function POST(request) {
       const correct = allCitations?.filter(c => c.status === 'found_correct').length || 0;
       const inconsistent = allCitations?.filter(c => c.status === 'found_inconsistent').length || 0;
       const missing = allCitations?.filter(c => c.status === 'not_found').length || 0;
-      const unknown = allCitations?.filter(c => c.status === 'unknown').length || 0;
-      // Score based on confirmed listings only (exclude unknowns from denominator)
-      const confirmed = total - unknown;
-      const score = confirmed > 0 ? Math.round((correct / confirmed) * 100) : 0;
+      const score = total > 0 ? Math.round(((correct + inconsistent) / total) * 100) : 0;
 
       await supabase.from('citation_audits').update({
         status: 'complete',
