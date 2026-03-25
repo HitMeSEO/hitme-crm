@@ -96,21 +96,40 @@ export async function POST(request) {
           contentRestrictions: settings?.content_restrictions || null,
         });
 
-        const message = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5-20250929',
-          max_tokens: 12000,
-          messages: [{ role: 'user', content: prompt }],
-        });
+        let message;
+        try {
+          message = await anthropic.messages.create({
+            model: 'claude-sonnet-4-5-20250929',
+            max_tokens: 12000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+        } catch (apiErr) {
+          console.error(`[bulk-generate] Anthropic API error for ${loc.location_name}:`, apiErr.message);
+          failed.push({ id: loc.id, name: loc.location_name, error: `API error: ${apiErr.message}` });
+          continue;
+        }
 
         const rawText = message.content[0]?.text?.trim() || '';
-        const cleaned = rawText.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
+        console.log(`[bulk-generate] ${loc.location_name} raw response (first 200 chars):`, rawText.substring(0, 200));
+
+        // Clean markdown code fences and find JSON
+        let cleaned = rawText.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
+
+        // If response doesn't start with {, try to find JSON in it
+        if (!cleaned.startsWith('{')) {
+          const jsonStart = cleaned.indexOf('{');
+          const jsonEnd = cleaned.lastIndexOf('}');
+          if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+          }
+        }
 
         let generated;
         try {
           generated = JSON.parse(cleaned);
         } catch (parseErr) {
-          console.error(`[bulk-generate] JSON parse failed for ${loc.location_name}:`, rawText.substring(0, 300));
-          failed.push({ id: loc.id, name: loc.location_name, error: 'Invalid JSON from Claude' });
+          console.error(`[bulk-generate] JSON parse failed for ${loc.location_name}. Raw (300 chars):`, rawText.substring(0, 300));
+          failed.push({ id: loc.id, name: loc.location_name, error: `${parseErr.message.substring(0, 80)}` });
           continue;
         }
 
