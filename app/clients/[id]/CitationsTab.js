@@ -72,12 +72,39 @@ function CitationRow({ citation }) {
             {citation.notes && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>{citation.notes}</p>
             )}
-            {citation.listing_url && (
-              <a href={citation.listing_url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>
-                View listing →
-              </a>
-            )}
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+              {citation.listing_url && (
+                <a href={citation.listing_url} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    fontSize: 12, color: 'var(--accent)', textDecoration: 'none',
+                    padding: '4px 10px', borderRadius: 6, border: '1px solid var(--accent)',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}>
+                  View listing →
+                </a>
+              )}
+              {citation.status === 'not_found' && citation.claim_url && (
+                <a href={citation.claim_url} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    fontSize: 12, color: '#fff', textDecoration: 'none',
+                    padding: '4px 10px', borderRadius: 6, background: 'var(--accent)',
+                    display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500,
+                  }}>
+                  + Claim Listing
+                </a>
+              )}
+              {citation.status === 'found_inconsistent' && citation.claim_url && (
+                <a href={citation.listing_url || citation.claim_url} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    fontSize: 12, color: '#fff', textDecoration: 'none',
+                    padding: '4px 10px', borderRadius: 6, background: '#ca8a04',
+                    display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500,
+                  }}>
+                  Fix NAP →
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}

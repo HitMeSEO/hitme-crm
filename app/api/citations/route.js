@@ -6,20 +6,20 @@ export const maxDuration = 60;
 
 // Directory registry
 const CORE_DIRECTORIES = [
-  { key: 'google', label: 'Google Business Profile', category: 'core' },
-  { key: 'yelp', label: 'Yelp', category: 'core' },
-  { key: 'bbb', label: 'Better Business Bureau', category: 'core' },
-  { key: 'apple_maps', label: 'Apple Maps', category: 'core' },
-  { key: 'facebook', label: 'Facebook', category: 'core' },
-  { key: 'bing_places', label: 'Bing Places', category: 'core' },
-  { key: 'yellowpages', label: 'YellowPages', category: 'core' },
-  { key: 'foursquare', label: 'Foursquare', category: 'core' },
-  { key: 'mapquest', label: 'MapQuest', category: 'core' },
-  { key: 'hotfrog', label: 'Hotfrog', category: 'core' },
-  { key: 'manta', label: 'Manta', category: 'core' },
-  { key: 'superpages', label: 'Superpages', category: 'core' },
-  { key: 'nextdoor', label: 'Nextdoor', category: 'core' },
-  { key: 'thumbtack', label: 'Thumbtack', category: 'core' },
+  { key: 'google', label: 'Google Business Profile', category: 'core', claimUrl: 'https://business.google.com/create' },
+  { key: 'yelp', label: 'Yelp', category: 'core', claimUrl: 'https://business.yelp.com/' },
+  { key: 'bbb', label: 'Better Business Bureau', category: 'core', claimUrl: 'https://www.bbb.org/get-listed' },
+  { key: 'apple_maps', label: 'Apple Maps', category: 'core', claimUrl: 'https://mapsconnect.apple.com/' },
+  { key: 'facebook', label: 'Facebook', category: 'core', claimUrl: 'https://www.facebook.com/pages/create/' },
+  { key: 'bing_places', label: 'Bing Places', category: 'core', claimUrl: 'https://www.bingplaces.com/' },
+  { key: 'yellowpages', label: 'YellowPages', category: 'core', claimUrl: 'https://adsolutions.yp.com/free-listing' },
+  { key: 'foursquare', label: 'Foursquare', category: 'core', claimUrl: 'https://business.foursquare.com/claim' },
+  { key: 'mapquest', label: 'MapQuest', category: 'core', claimUrl: 'https://www.mapquest.com/my-business' },
+  { key: 'hotfrog', label: 'Hotfrog', category: 'core', claimUrl: 'https://www.hotfrog.com/add-your-business' },
+  { key: 'manta', label: 'Manta', category: 'core', claimUrl: 'https://www.manta.com/claim' },
+  { key: 'superpages', label: 'Superpages', category: 'core', claimUrl: 'https://adsolutions.yp.com/free-listing' },
+  { key: 'nextdoor', label: 'Nextdoor', category: 'core', claimUrl: 'https://business.nextdoor.com/claim' },
+  { key: 'thumbtack', label: 'Thumbtack', category: 'core', claimUrl: 'https://www.thumbtack.com/pro/' },
 ];
 
 // Home services keyword list (shared across many directories)
@@ -27,68 +27,68 @@ const HOME_SVC = ['home services', 'plumbing', 'hvac', 'electrical', 'roofing', 
 
 const INDUSTRY_DIRECTORIES = [
   // === HOME SERVICES (your core clients) ===
-  { key: 'angi', label: 'Angi', category: 'industry', industries: HOME_SVC },
-  { key: 'homeadvisor', label: 'HomeAdvisor', category: 'industry', industries: HOME_SVC },
-  { key: 'houzz', label: 'Houzz', category: 'industry', industries: [...HOME_SVC, 'interior design', 'architecture'] },
-  { key: 'porch', label: 'Porch', category: 'industry', industries: HOME_SVC },
-  { key: 'bark', label: 'Bark', category: 'industry', industries: HOME_SVC },
-  { key: 'taskrabbit', label: 'TaskRabbit', category: 'industry', industries: ['handyman', 'moving', 'cleaning', 'junk removal', 'junk hauling', 'hauling', 'home services', 'furniture assembly'] },
-  { key: 'networx', label: 'Networx', category: 'industry', industries: HOME_SVC },
-  { key: 'buildzoom', label: 'BuildZoom', category: 'industry', industries: ['construction', 'contractor', 'remodeling', 'renovation', 'roofing', 'fencing', 'paving', 'concrete', 'demolition'] },
-  { key: 'homeservices_com', label: 'HomeServices.com', category: 'industry', industries: HOME_SVC },
+  { key: 'angi', label: 'Angi', category: 'industry', claimUrl: 'https://www.angi.com/pro/', industries: HOME_SVC },
+  { key: 'homeadvisor', label: 'HomeAdvisor', category: 'industry', claimUrl: 'https://pro.homeadvisor.com/', industries: HOME_SVC },
+  { key: 'houzz', label: 'Houzz', category: 'industry', claimUrl: 'https://www.houzz.com/professionals', industries: [...HOME_SVC, 'interior design', 'architecture'] },
+  { key: 'porch', label: 'Porch', category: 'industry', claimUrl: 'https://pro.porch.com/signup', industries: HOME_SVC },
+  { key: 'bark', label: 'Bark', category: 'industry', claimUrl: 'https://www.bark.com/en/us/pro-signup/', industries: HOME_SVC },
+  { key: 'taskrabbit', label: 'TaskRabbit', category: 'industry', claimUrl: 'https://www.taskrabbit.com/become-a-tasker', industries: ['handyman', 'moving', 'cleaning', 'junk removal', 'junk hauling', 'hauling', 'home services', 'furniture assembly'] },
+  { key: 'networx', label: 'Networx', category: 'industry', claimUrl: 'https://www.networx.com/contractors', industries: HOME_SVC },
+  { key: 'buildzoom', label: 'BuildZoom', category: 'industry', claimUrl: 'https://www.buildzoom.com/contractor/claim', industries: ['construction', 'contractor', 'remodeling', 'renovation', 'roofing', 'fencing', 'paving', 'concrete', 'demolition'] },
+  { key: 'homeservices_com', label: 'HomeServices.com', category: 'industry', claimUrl: 'https://www.homeservices.com/', industries: HOME_SVC },
 
   // === DUMPSTER / JUNK / HAULING / MOVING ===
-  { key: 'hometown_dumpster', label: 'Hometown Dumpster Rental', category: 'industry', industries: ['dumpster', 'dumpster rental', 'junk removal', 'junk hauling', 'hauling', 'demolition'] },
-  { key: 'dumpsters_com', label: 'Dumpsters.com', category: 'industry', industries: ['dumpster', 'dumpster rental', 'junk removal', 'demolition'] },
-  { key: 'junk_king', label: 'Junk King (franchise check)', category: 'industry', industries: ['junk removal', 'junk hauling', 'hauling'] },
-  { key: 'moving_com', label: 'Moving.com', category: 'industry', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
-  { key: 'uhaul_marketplace', label: 'U-Haul Moving Help', category: 'industry', industries: ['moving', 'moving company', 'hauling'] },
-  { key: 'hire_a_helper', label: 'HireAHelper', category: 'industry', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
-  { key: 'unpakt', label: 'Unpakt', category: 'industry', industries: ['moving', 'moving company'] },
-  { key: 'movingauthority', label: 'Moving Authority (FMCSA)', category: 'industry', industries: ['moving', 'moving company'] },
+  { key: 'hometown_dumpster', label: 'Hometown Dumpster Rental', category: 'industry', claimUrl: 'https://www.hometowndumpsterrental.com/haulers', industries: ['dumpster', 'dumpster rental', 'junk removal', 'junk hauling', 'hauling', 'demolition'] },
+  { key: 'dumpsters_com', label: 'Dumpsters.com', category: 'industry', claimUrl: 'https://www.dumpsters.com/partners', industries: ['dumpster', 'dumpster rental', 'junk removal', 'demolition'] },
+  { key: 'junk_king', label: 'Junk King (franchise check)', category: 'industry', claimUrl: 'https://www.junk-king.com/', industries: ['junk removal', 'junk hauling', 'hauling'] },
+  { key: 'moving_com', label: 'Moving.com', category: 'industry', claimUrl: 'https://www.moving.com/movers/list-your-company/', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
+  { key: 'uhaul_marketplace', label: 'U-Haul Moving Help', category: 'industry', claimUrl: 'https://www.movinghelp.com/become-a-mover', industries: ['moving', 'moving company', 'hauling'] },
+  { key: 'hire_a_helper', label: 'HireAHelper', category: 'industry', claimUrl: 'https://www.hireahelper.com/moving-companies/signup/', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
+  { key: 'unpakt', label: 'Unpakt', category: 'industry', claimUrl: 'https://www.unpakt.com/movers/signup', industries: ['moving', 'moving company'] },
+  { key: 'movingauthority', label: 'Moving Authority (FMCSA)', category: 'industry', claimUrl: 'https://www.movingauthority.com/', industries: ['moving', 'moving company'] },
 
   // === ROOFING / PAVING / FENCING / HVAC ===
-  { key: 'gaf_roofer', label: 'GAF Roofer Directory', category: 'industry', industries: ['roofing'] },
-  { key: 'owens_corning', label: 'Owens Corning Contractor', category: 'industry', industries: ['roofing'] },
-  { key: 'certainteed', label: 'CertainTeed Contractor', category: 'industry', industries: ['roofing', 'siding', 'fencing'] },
-  { key: 'nrca', label: 'NRCA Member Directory', category: 'industry', industries: ['roofing'] },
-  { key: 'hvac_com', label: 'HVAC.com', category: 'industry', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
-  { key: 'carrier', label: 'Carrier Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
-  { key: 'trane', label: 'Trane Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling'] },
-  { key: 'lennox', label: 'Lennox Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling'] },
-  { key: 'expertise_com', label: 'Expertise.com', category: 'industry', industries: HOME_SVC },
-  { key: 'concrete_network', label: 'ConcreteNetwork.com', category: 'industry', industries: ['concrete', 'paving', 'asphalt', 'sealcoating', 'driveway'] },
+  { key: 'gaf_roofer', label: 'GAF Roofer Directory', category: 'industry', claimUrl: 'https://www.gaf.com/en-us/for-professionals', industries: ['roofing'] },
+  { key: 'owens_corning', label: 'Owens Corning Contractor', category: 'industry', claimUrl: 'https://www.owenscorning.com/en-us/roofing/contractors', industries: ['roofing'] },
+  { key: 'certainteed', label: 'CertainTeed Contractor', category: 'industry', claimUrl: 'https://www.certainteed.com/find-a-pro/', industries: ['roofing', 'siding', 'fencing'] },
+  { key: 'nrca', label: 'NRCA Member Directory', category: 'industry', claimUrl: 'https://www.nrca.net/membership', industries: ['roofing'] },
+  { key: 'hvac_com', label: 'HVAC.com', category: 'industry', claimUrl: 'https://www.hvac.com/contractors/', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
+  { key: 'carrier', label: 'Carrier Dealer Locator', category: 'industry', claimUrl: 'https://www.carrier.com/residential/en/us/for-dealers/', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
+  { key: 'trane', label: 'Trane Dealer Locator', category: 'industry', claimUrl: 'https://www.trane.com/residential/en/for-dealers/', industries: ['hvac', 'heating', 'cooling'] },
+  { key: 'lennox', label: 'Lennox Dealer Locator', category: 'industry', claimUrl: 'https://www.lennox.com/dealers/become-a-dealer', industries: ['hvac', 'heating', 'cooling'] },
+  { key: 'expertise_com', label: 'Expertise.com', category: 'industry', claimUrl: 'https://www.expertise.com/claim', industries: HOME_SVC },
+  { key: 'concrete_network', label: 'ConcreteNetwork.com', category: 'industry', claimUrl: 'https://www.concretenetwork.com/contractors/', industries: ['concrete', 'paving', 'asphalt', 'sealcoating', 'driveway'] },
 
   // === GENERAL SERVICE DIRECTORIES ===
-  { key: 'bni', label: 'BNI Member Directory', category: 'industry', industries: HOME_SVC },
-  { key: 'alignable', label: 'Alignable', category: 'industry', industries: HOME_SVC },
-  { key: 'local_com', label: 'Local.com', category: 'industry', industries: HOME_SVC },
-  { key: 'chamberofcommerce', label: 'ChamberOfCommerce.com', category: 'industry', industries: HOME_SVC },
-  { key: 'merchantcircle', label: 'MerchantCircle', category: 'industry', industries: HOME_SVC },
-  { key: 'brownbook', label: 'Brownbook', category: 'industry', industries: HOME_SVC },
-  { key: 'cylex', label: 'Cylex', category: 'industry', industries: HOME_SVC },
-  { key: 'ezlocal', label: 'EZlocal', category: 'industry', industries: HOME_SVC },
-  { key: 'showmelocal', label: 'ShowMeLocal', category: 'industry', industries: HOME_SVC },
+  { key: 'bni', label: 'BNI Member Directory', category: 'industry', claimUrl: 'https://www.bni.com/find-a-chapter', industries: HOME_SVC },
+  { key: 'alignable', label: 'Alignable', category: 'industry', claimUrl: 'https://www.alignable.com/biz/signup', industries: HOME_SVC },
+  { key: 'local_com', label: 'Local.com', category: 'industry', claimUrl: 'https://www.local.com/business/claim', industries: HOME_SVC },
+  { key: 'chamberofcommerce', label: 'ChamberOfCommerce.com', category: 'industry', claimUrl: 'https://www.chamberofcommerce.com/add-business', industries: HOME_SVC },
+  { key: 'merchantcircle', label: 'MerchantCircle', category: 'industry', claimUrl: 'https://www.merchantcircle.com/signup', industries: HOME_SVC },
+  { key: 'brownbook', label: 'Brownbook', category: 'industry', claimUrl: 'https://www.brownbook.net/business/add/', industries: HOME_SVC },
+  { key: 'cylex', label: 'Cylex', category: 'industry', claimUrl: 'https://www.cylex.us.com/add-company.html', industries: HOME_SVC },
+  { key: 'ezlocal', label: 'EZlocal', category: 'industry', claimUrl: 'https://www.ezlocal.com/claim', industries: HOME_SVC },
+  { key: 'showmelocal', label: 'ShowMeLocal', category: 'industry', claimUrl: 'https://www.showmelocal.com/AddBusiness.aspx', industries: HOME_SVC },
 
   // === DATA AGGREGATORS (feed dozens of smaller directories) ===
-  { key: 'data_axle', label: 'Data Axle (Infogroup)', category: 'industry', industries: HOME_SVC },
-  { key: 'neustar_localeze', label: 'Neustar Localeze', category: 'industry', industries: HOME_SVC },
-  { key: 'factual', label: 'Factual (Foursquare Data)', category: 'industry', industries: HOME_SVC },
+  { key: 'data_axle', label: 'Data Axle (Infogroup)', category: 'industry', claimUrl: 'https://www.data-axle.com/business-listings/', industries: HOME_SVC },
+  { key: 'neustar_localeze', label: 'Neustar Localeze', category: 'industry', claimUrl: 'https://www.neustarlocaleze.biz/directory/add-business/', industries: HOME_SVC },
+  { key: 'factual', label: 'Factual (Foursquare Data)', category: 'industry', claimUrl: 'https://location.foursquare.com/products/data-enrichment/', industries: HOME_SVC },
 
-  // === MEDICAL (kept for flexibility) ===
-  { key: 'healthgrades', label: 'Healthgrades', category: 'industry', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'hospital', 'optometry', 'chiropractic'] },
-  { key: 'zocdoc', label: 'Zocdoc', category: 'industry', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'therapy'] },
+  // === MEDICAL ===
+  { key: 'healthgrades', label: 'Healthgrades', category: 'industry', claimUrl: 'https://update.healthgrades.com/', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'hospital', 'optometry', 'chiropractic'] },
+  { key: 'zocdoc', label: 'Zocdoc', category: 'industry', claimUrl: 'https://www.zocdoc.com/join', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'therapy'] },
 
   // === LEGAL ===
-  { key: 'avvo', label: 'Avvo', category: 'industry', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
-  { key: 'findlaw', label: 'FindLaw', category: 'industry', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
+  { key: 'avvo', label: 'Avvo', category: 'industry', claimUrl: 'https://www.avvo.com/claim-your-profile', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
+  { key: 'findlaw', label: 'FindLaw', category: 'industry', claimUrl: 'https://www.findlaw.com/lawyer/claim-profile.html', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
 
   // === FOOD / HOSPITALITY ===
-  { key: 'tripadvisor', label: 'TripAdvisor', category: 'industry', industries: ['restaurant', 'food', 'hospitality', 'hotel', 'travel', 'tourism', 'bar', 'cafe'] },
-  { key: 'opentable', label: 'OpenTable', category: 'industry', industries: ['restaurant', 'food', 'dining', 'bar', 'cafe'] },
+  { key: 'tripadvisor', label: 'TripAdvisor', category: 'industry', claimUrl: 'https://www.tripadvisor.com/Owners', industries: ['restaurant', 'food', 'hospitality', 'hotel', 'travel', 'tourism', 'bar', 'cafe'] },
+  { key: 'opentable', label: 'OpenTable', category: 'industry', claimUrl: 'https://restaurant.opentable.com/get-started/', industries: ['restaurant', 'food', 'dining', 'bar', 'cafe'] },
 
   // === AUTOMOTIVE ===
-  { key: 'carfax', label: 'Carfax', category: 'industry', industries: ['automotive', 'auto repair', 'car dealer', 'mechanic', 'auto body'] },
+  { key: 'carfax', label: 'Carfax', category: 'industry', claimUrl: 'https://www.carfaxforDealers.com/', industries: ['automotive', 'auto repair', 'car dealer', 'mechanic', 'auto body'] },
 
   // === REAL ESTATE ===
   { key: 'zillow', label: 'Zillow', category: 'industry', industries: ['real estate', 'realtor', 'property management', 'mortgage'] },
@@ -258,6 +258,7 @@ export async function POST(request) {
         found_phone: c.found_phone,
         found_url: c.found_url,
         listing_url: c.listing_url,
+        claim_url: dirDef.claimUrl || null,
         notes: c.notes,
       });
     }
