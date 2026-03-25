@@ -19,6 +19,7 @@ import NotesTab from './NotesTab';
 import OnboardingTab from './OnboardingTab';
 import SeoAuditTab from './SeoAuditTab';
 import ImagesTab from './ImagesTab';
+import CitationsTab from './CitationsTab';
 
 const TABS = [
   { key: 'overview', label: 'Overview' },
@@ -31,6 +32,7 @@ const TABS = [
   { key: 'gbp_health', label: 'GBP Health' },
   { key: 'images', label: 'Images' },
   { key: 'seo_audit', label: 'SEO Audit' },
+  { key: 'citations', label: 'Citations' },
   { key: 'wiki', label: 'Wiki' },
   { key: 'onboarding', label: 'Onboarding' },
 ];
@@ -814,6 +816,7 @@ export default function ClientDetailPage() {
       {tab === 'gbp_health' && <GbpHealthTab client={client} setClient={setClient} clientId={id} />}
       {tab === 'images' && <ImagesTab clientId={id} />}
       {tab === 'seo_audit' && <SeoAuditTab clientId={id} client={client} setClient={setClient} />}
+      {tab === 'citations' && <CitationsTab clientId={id} />}
       {tab === 'onboarding' && <OnboardingTab onboardingForm={onboardingForm} clientId={id} onSendForm={handleSendOnboard} sendingOnboard={sendingOnboard} onboardUrl={onboardUrl} onboardCopied={onboardCopied} setOnboardCopied={setOnboardCopied} setOnboardUrl={setOnboardUrl} setShowOnboardPanel={setShowOnboardPanel} refreshOnboarding={refreshOnboarding} />}
     </AppShell>
   );
