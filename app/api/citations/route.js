@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // Directory registry
 const CORE_DIRECTORIES = [
@@ -116,7 +116,7 @@ function getDirectories(client) {
 
 const SYSTEM_PROMPT = `You are a local SEO citation expert analyzing NAP (Name, Address, Phone) consistency across business directories.
 
-You will be given a business's correct NAP and a list of directories. Based on your knowledge of the business and its web presence, assess whether they are likely listed on each directory and whether NAP is consistent.
+You will be given a business's correct NAP and a list of directories. Use the web_search tool to check EACH directory for the business listing. Search for the business name + directory name (e.g., "Beckett Siteworx BBB" or "Beckett Siteworx Yelp").
 
 Return ONLY valid JSON. No markdown, no backticks, no explanation.
 
@@ -134,17 +134,19 @@ Return this structure:
       "found_address": "<address found or null>",
       "found_phone": "<phone found or null>",
       "found_url": "<url found or null>",
-      "listing_url": "<likely listing URL or null>",
+      "listing_url": "<actual URL of the listing if found, or null>",
       "notes": "<brief note>"
     }
   ]
 }
 
 Rules:
-- "found_correct": Business likely listed with matching NAP
-- "found_inconsistent": Listed but NAP has discrepancies (old address, wrong phone, abbreviations, etc.)
-- "not_found": Business likely NOT listed
-- Be realistic — newer/smaller businesses may not be on all directories`;
+- "found_correct": Business IS listed with matching NAP (you found their actual listing page)
+- "found_inconsistent": Business IS listed but NAP has discrepancies (old address, wrong phone, abbreviations, different business name spelling, etc.)
+- "not_found": Business is NOT listed — you searched and confirmed no listing exists
+- IMPORTANT: If a business has a listing on a directory, the status MUST be "found_correct" or "found_inconsistent", NEVER "not_found". Only use "not_found" when you are confident no listing exists.
+- For "listing_url", provide the ACTUAL URL of the listing page if you find one (e.g., the direct BBB profile URL, the Yelp business page URL). This is critical — Pam needs the real link, not a generic claim URL.
+- Be thorough: search each directory individually. Do not guess.`;
 
 // GET — fetch latest audit for a client
 export async function GET(request) {
@@ -222,18 +224,59 @@ export async function POST(request) {
 
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    // Build search queries for Claude to use
+    const searchInstructions = batch.map(d =>
+      `Search for: "${client.company_name} ${d.label}" to find their listing on ${d.label}. If not found, also try "${client.company_name} ${client.city || ''} ${d.label}".`
+    ).join('\n');
+
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 3000,
+      max_tokens: 4000,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `${context}\n\nCheck these directories:\n${dirList}\n\nReturn JSON with one entry per directory.` }],
+      tools: [{ type: 'web_search', name: 'web_search' }],
+      messages: [{ role: 'user', content: `${context}\n\nCheck these directories:\n${dirList}\n\n${searchInstructions}\n\nSearch each directory, then return JSON with one entry per directory. Include the actual listing URL if found.` }],
     });
 
-    let text = msg.content
+    // Extract text from response (may have multiple rounds with web_search)
+    // If stop_reason is 'tool_use', we need to continue the conversation
+    let messages = [{ role: 'user', content: `${context}\n\nCheck these directories:\n${dirList}\n\n${searchInstructions}\n\nSearch each directory, then return JSON with one entry per directory. Include the actual listing URL if found.` }];
+    let currentMsg = msg;
+    let maxRounds = 12; // Up to 12 search rounds
+
+    while (currentMsg.stop_reason === 'tool_use' && maxRounds > 0) {
+      maxRounds--;
+      // Add assistant response and tool results
+      messages.push({ role: 'assistant', content: currentMsg.content });
+      const toolUseBlocks = currentMsg.content.filter(b => b.type === 'tool_use');
+      const toolResults = toolUseBlocks.map(b => ({
+        type: 'tool_result',
+        tool_use_id: b.id,
+        content: '', // web_search results are auto-handled by the API
+      }));
+      messages.push({ role: 'user', content: toolResults });
+
+      currentMsg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 4000,
+        system: SYSTEM_PROMPT,
+        tools: [{ type: 'web_search', name: 'web_search' }],
+        messages,
+      });
+    }
+
+    let text = currentMsg.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('\n')
       .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    // Find the JSON in the text (might have explanation text around it)
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      text = text.substring(jsonStart, jsonEnd + 1);
+    }
 
     const parsed = JSON.parse(text);
 
