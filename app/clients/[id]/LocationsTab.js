@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, X, ExternalLink } from 'lucide-react';
+import { Plus, X, ExternalLink, Zap } from 'lucide-react';
 
 function LocationsTab({ locations, setLocations, clientId, setTab, refreshContent, clientSettings }) {
   const [researchingId, setResearchingId] = useState(null);
@@ -12,6 +12,7 @@ function LocationsTab({ locations, setLocations, clientId, setTab, refreshConten
   const [generateError, setGenerateError] = useState({});
   const [generateModal, setGenerateModal] = useState(null); // { loc }
   const [showAddArea, setShowAddArea] = useState(false);
+  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
 
   const completedCount = locations.filter(l => l.research_status === 'complete').length;
   const contentCount = locations.filter(l => ['draft', 'approved', 'published'].includes(l.content_status)).length;
@@ -109,17 +110,32 @@ function LocationsTab({ locations, setLocations, clientId, setTab, refreshConten
             </>
           )}
         </div>
-        <button
-          onClick={() => setShowAddArea(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600, minHeight: 40,
-            background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <Plus size={16} /> Add Service Area
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {locations.length >= 2 && (
+            <button
+              onClick={() => setShowBulkGenerate(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600, minHeight: 40,
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', border: 'none', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Zap size={16} /> Bulk Generate All
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddArea(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600, minHeight: 40,
+              background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Plus size={16} /> Add Service Area
+          </button>
+        </div>
       </div>
 
       {locations.length === 0 && (
@@ -339,6 +355,16 @@ function LocationsTab({ locations, setLocations, clientId, setTab, refreshConten
             setLocations(prev => [...prev, newLoc]);
             setShowAddArea(false);
           }}
+        />
+      )}
+
+      {showBulkGenerate && (
+        <BulkGenerateModal
+          clientId={clientId}
+          locations={locations}
+          setLocations={setLocations}
+          refreshContent={refreshContent}
+          onClose={() => setShowBulkGenerate(false)}
         />
       )}
     </div>
@@ -1125,6 +1151,453 @@ function KeywordBriefModal({ loc, onClose }) {
             border: '1px solid var(--border)', cursor: 'pointer',
           }}>Close</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================
+// BULK GENERATE MODAL
+// ============================================================
+function BulkGenerateModal({ clientId, locations, setLocations, refreshContent, onClose }) {
+  const [step, setStep] = useState('select'); // select | progress | summary
+  const [selected, setSelected] = useState(() => {
+    // Pre-select locations with briefs that don't have published pages
+    return locations
+      .filter(l => l.research_status === 'complete' && l.content_status !== 'published')
+      .map(l => l.id);
+  });
+  const [progress, setProgress] = useState({ phase: '', current: 0, total: 0, currentName: '', log: [] });
+  const [results, setResults] = useState({ completed: [], failed: [], scores: {} });
+  const [jobId, setJobId] = useState(null);
+  const [cancelled, setCancelled] = useState(false);
+
+  const needsResearch = locations.filter(l => selected.includes(l.id) && l.research_status !== 'complete');
+  const readyToGenerate = locations.filter(l => selected.includes(l.id) && l.research_status === 'complete');
+  const totalSelected = selected.length;
+
+  const toggleAll = () => {
+    if (selected.length === locations.length) {
+      setSelected([]);
+    } else {
+      setSelected(locations.map(l => l.id));
+    }
+  };
+
+  const toggleOne = (id) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const startBulkGeneration = async () => {
+    setStep('progress');
+    setCancelled(false);
+
+    const allSelected = locations.filter(l => selected.includes(l.id));
+    const toResearch = allSelected.filter(l => l.research_status !== 'complete');
+    const totalSteps = allSelected.length;
+    let completedSoFar = 0;
+    const allCompleted = [];
+    const allFailed = [];
+    const allScores = {};
+
+    // Phase 1: Research locations without briefs
+    if (toResearch.length > 0) {
+      setProgress({ phase: 'Researching', current: 0, total: toResearch.length, currentName: '', log: [] });
+
+      for (const loc of toResearch) {
+        if (cancelled) break;
+        setProgress(prev => ({ ...prev, current: prev.current + 1, currentName: loc.location_name }));
+
+        try {
+          const res = await fetch('/api/content/research', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId, locationId: loc.id }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Research failed');
+
+          setLocations(prev => prev.map(l => l.id === loc.id ? { ...l, research_status: 'complete', keyword_brief: data.brief } : l));
+          setProgress(prev => ({ ...prev, log: [...prev.log, { name: loc.location_name, status: 'researched' }] }));
+        } catch (err) {
+          allFailed.push({ id: loc.id, name: loc.location_name, error: err.message });
+          setProgress(prev => ({ ...prev, log: [...prev.log, { name: loc.location_name, status: 'failed', error: err.message }] }));
+        }
+      }
+    }
+
+    // Phase 2: Create bulk job
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const readyLocs = locations
+      .filter(l => selected.includes(l.id))
+      .filter(l => l.research_status === 'complete' || toResearch.some(r => r.id === l.id && !allFailed.some(f => f.id === r.id)));
+
+    // Refresh locations to get updated keyword_brief data
+    const { data: freshLocations } = await supabase
+      .from('locations')
+      .select('*')
+      .eq('client_id', clientId);
+
+    const locationsWithBriefs = (freshLocations || [])
+      .filter(l => selected.includes(l.id) && l.research_status === 'complete' && l.keyword_brief)
+      .filter(l => !allFailed.some(f => f.id === l.id));
+
+    if (locationsWithBriefs.length === 0) {
+      setStep('summary');
+      setResults({ completed: allCompleted, failed: allFailed, scores: allScores });
+      return;
+    }
+
+    // Create job record
+    const { data: job } = await supabase
+      .from('bulk_generation_jobs')
+      .insert({
+        client_id: clientId,
+        status: 'running',
+        total_locations: locationsWithBriefs.length,
+      })
+      .select('id')
+      .single();
+
+    const bulkJobId = job?.id;
+    setJobId(bulkJobId);
+
+    // Phase 2: Generate in batches of 8
+    const batchSize = 8;
+    const batches = [];
+    for (let i = 0; i < locationsWithBriefs.length; i += batchSize) {
+      batches.push(locationsWithBriefs.slice(i, i + batchSize).map(l => l.id));
+    }
+
+    setProgress({ phase: 'Generating', current: 0, total: locationsWithBriefs.length, currentName: '', log: [] });
+
+    for (const batch of batches) {
+      if (cancelled) break;
+
+      try {
+        const res = await fetch('/api/content/bulk-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, locationIds: batch, jobId: bulkJobId }),
+        });
+        const data = await res.json();
+
+        if (data.completed) {
+          allCompleted.push(...data.completed);
+          completedSoFar += data.completed.length;
+        }
+        if (data.failed) allFailed.push(...data.failed);
+        if (data.scores) Object.assign(allScores, data.scores);
+
+        // Update location statuses
+        for (const id of (data.completed || [])) {
+          setLocations(prev => prev.map(l => l.id === id ? { ...l, content_status: 'draft' } : l));
+        }
+
+        setProgress(prev => ({
+          ...prev,
+          current: completedSoFar,
+          log: [
+            ...prev.log,
+            ...(data.completed || []).map(id => {
+              const loc = locationsWithBriefs.find(l => l.id === id);
+              return { name: loc?.location_name || id, status: 'generated' };
+            }),
+            ...(data.failed || []).map(f => ({ name: f.name, status: 'failed', error: f.error })),
+          ],
+        }));
+      } catch (err) {
+        batch.forEach(id => {
+          const loc = locationsWithBriefs.find(l => l.id === id);
+          allFailed.push({ id, name: loc?.location_name || id, error: err.message });
+        });
+      }
+    }
+
+    // Phase 3: Uniqueness check
+    if (allCompleted.length >= 2) {
+      setProgress(prev => ({ ...prev, phase: 'Checking uniqueness', currentName: '' }));
+      try {
+        const res = await fetch('/api/content/uniqueness-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId }),
+        });
+        const uData = await res.json();
+        if (uData.scores) {
+          for (const [contentId, score] of Object.entries(uData.scores)) {
+            for (const [locId, scoreData] of Object.entries(allScores)) {
+              if (scoreData.contentId === contentId) {
+                scoreData.uniquenessScore = score;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[bulk] uniqueness check failed:', err.message);
+      }
+    }
+
+    // Done
+    if (bulkJobId) {
+      await supabase
+        .from('bulk_generation_jobs')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .eq('id', bulkJobId);
+    }
+
+    if (refreshContent) await refreshContent();
+    setResults({ completed: allCompleted, failed: allFailed, scores: allScores });
+    setStep('summary');
+  };
+
+  const QualityDot = ({ value, green, yellow }) => {
+    const color = value >= green ? '#10b981' : value >= yellow ? '#f59e0b' : '#ef4444';
+    return <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 4 }} />;
+  };
+
+  const modalStyle = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1001, padding: 16,
+  };
+  const innerStyle = {
+    background: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 14, padding: 28, width: '100%', maxWidth: 640,
+    maxHeight: '85vh', overflow: 'auto',
+  };
+
+  return (
+    <div className="crm-modal-wrap" style={modalStyle} onClick={() => step === 'select' && onClose()}>
+      <div className="crm-modal-inner" style={innerStyle} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {step === 'select' && '⚡ Bulk Generate Content'}
+            {step === 'progress' && '⚡ Generating...'}
+            {step === 'summary' && '✅ Bulk Generation Complete'}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Step 1: Selection */}
+        {step === 'select' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                {totalSelected} selected ({needsResearch.length} need research, {readyToGenerate.length} ready)
+              </div>
+              <button
+                onClick={toggleAll}
+                style={{ fontSize: 13, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {selected.length === locations.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+
+            <div style={{ maxHeight: 350, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+              {locations.map(loc => {
+                const isChecked = selected.includes(loc.id);
+                const hasResearch = loc.research_status === 'complete';
+                const hasContent = loc.content_status === 'draft' || loc.content_status === 'published';
+                return (
+                  <label
+                    key={loc.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                      background: isChecked ? 'rgba(99,102,241,0.05)' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleOne(loc.id)}
+                      style={{ width: 16, height: 16, accentColor: '#6366f1' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{loc.location_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, marginTop: 2 }}>
+                        <span style={{ color: hasResearch ? '#10b981' : '#f59e0b' }}>
+                          {hasResearch ? '🟢 Brief ready' : '🟡 Needs research'}
+                        </span>
+                        <span style={{ color: hasContent ? '#6366f1' : 'var(--text-muted)' }}>
+                          {loc.content_status === 'published' ? '🟢 Published' : hasContent ? '🟡 Draft exists' : '⚪ No page'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {needsResearch.length > 0 && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(245,158,11,0.08)', borderRadius: 8, fontSize: 13, color: '#f59e0b' }}>
+                {needsResearch.length} location{needsResearch.length > 1 ? 's' : ''} need keyword research first. This adds ~1-2 min per location.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+                  border: '1px solid var(--border)', cursor: 'pointer',
+                }}
+              >Cancel</button>
+              <button
+                onClick={startBulkGeneration}
+                disabled={totalSelected === 0}
+                style={{
+                  padding: '10px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: totalSelected > 0 ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : '#555',
+                  color: 'white', border: 'none',
+                  cursor: totalSelected > 0 ? 'pointer' : 'not-allowed',
+                  opacity: totalSelected > 0 ? 1 : 0.5,
+                }}
+              >
+                Generate {totalSelected} Page{totalSelected !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 2: Progress */}
+        {step === 'progress' && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
+                {progress.phase} {progress.current} of {progress.total}
+                {progress.currentName && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> — {progress.currentName}</span>}
+              </div>
+              <div style={{ height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3, transition: 'width 0.3s',
+                  background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                  width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '0%',
+                }} />
+              </div>
+            </div>
+
+            <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+              {progress.log.map((entry, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+                  borderBottom: '1px solid var(--border)', fontSize: 13,
+                }}>
+                  <span>{entry.status === 'failed' ? '❌' : entry.status === 'researched' ? '🔍' : '✅'}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{entry.name}</span>
+                  <span style={{ color: entry.status === 'failed' ? '#ef4444' : '#10b981', fontSize: 12 }}>
+                    {entry.status === 'failed' ? entry.error : entry.status}
+                  </span>
+                </div>
+              ))}
+              {progress.log.length === 0 && (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  <div>Starting...</div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Step 3: Summary */}
+        {step === 'summary' && (
+          <>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+              <div style={{ padding: '12px 20px', borderRadius: 8, background: 'rgba(16,185,129,0.08)', textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{results.completed.length}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Generated</div>
+              </div>
+              {results.failed.length > 0 && (
+                <div style={{ padding: '12px 20px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#ef4444' }}>{results.failed.length}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Failed</div>
+                </div>
+              )}
+            </div>
+
+            {/* Quality table */}
+            {Object.keys(results.scores).length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-tertiary)' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)' }}>Location</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)' }}>Words</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)' }}>Keywords</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)' }}>Unique</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(results.scores).map(([locId, data]) => {
+                      const loc = locations.find(l => l.id === locId);
+                      const secTotal = (data.keywordCoverage?.secondary_hit?.length || 0) + (data.keywordCoverage?.secondary_miss?.length || 0);
+                      const secPct = secTotal > 0 ? Math.round((data.keywordCoverage?.secondary_hit?.length || 0) / secTotal * 100) : 0;
+                      return (
+                        <tr key={locId} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {loc?.location_name || locId}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <QualityDot value={data.wordCount} green={1000} yellow={800} />
+                            {data.wordCount}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <QualityDot value={secPct} green={70} yellow={50} />
+                            {secPct}%
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            {data.uniquenessScore != null ? (
+                              <><QualityDot value={data.uniquenessScore} green={80} yellow={60} />{data.uniquenessScore}</>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {results.failed.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>Failed:</div>
+                {results.failed.map((f, i) => (
+                  <div key={i} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3 }}>
+                    {f.name}: {f.error}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setTab('content')}
+                style={{
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
+                  border: '1px solid rgba(6,182,212,0.3)', cursor: 'pointer',
+                }}
+              >View in Content Tab</button>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  background: 'var(--accent)', color: 'white',
+                  border: 'none', cursor: 'pointer',
+                }}
+              >Done</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

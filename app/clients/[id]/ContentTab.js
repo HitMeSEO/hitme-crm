@@ -509,6 +509,20 @@ function ContentTab({ content, client, clientId, refreshContent, setClient, clie
                     fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: 'none',
                     background: `${CONTENT_STATUS_COLORS[item.status] || '#64748b'}18`, color: CONTENT_STATUS_COLORS[item.status] || '#64748b',
                   }}>{item.status}</button>
+                  {isPage && item.word_count && (
+                    <span title={`${item.word_count} words`} style={{
+                      fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
+                      background: item.word_count >= 1000 ? 'rgba(16,185,129,0.12)' : item.word_count >= 800 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                      color: item.word_count >= 1000 ? '#10b981' : item.word_count >= 800 ? '#f59e0b' : '#ef4444',
+                    }}>{item.word_count}w</span>
+                  )}
+                  {isPage && item.uniqueness_score != null && (
+                    <span title={`Uniqueness: ${item.uniqueness_score}%`} style={{
+                      fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
+                      background: item.uniqueness_score >= 80 ? 'rgba(16,185,129,0.12)' : item.uniqueness_score >= 60 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                      color: item.uniqueness_score >= 80 ? '#10b981' : item.uniqueness_score >= 60 ? '#f59e0b' : '#ef4444',
+                    }}>U:{Math.round(item.uniqueness_score)}</span>
+                  )}
                   {isPage && item.client_approval && item.client_approval !== 'not_sent' && (
                     <span style={{
                       fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: '0.3px',
