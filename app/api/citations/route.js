@@ -94,6 +94,48 @@ const INDUSTRY_DIRECTORIES = [
   { key: 'zillow', label: 'Zillow', category: 'industry', industries: ['real estate', 'realtor', 'property management', 'mortgage'] },
 ];
 
+// Build known listings from CRM data — skip web search for these
+function buildKnownListings(client) {
+  const known = {};
+  const fullAddress = [client.address_street, client.address_city, client.address_state, client.address_zip].filter(Boolean).join(', ');
+
+  // Google Business Profile — if we have gbp_place_id or gbp_maps_url, it exists
+  if (client.gbp_place_id || client.gbp_maps_url) {
+    known.google = {
+      status: 'found_correct',
+      name_match: true,
+      address_match: true,
+      phone_match: !!client.phone,
+      url_match: !!client.website,
+      found_name: client.company_name,
+      found_address: fullAddress,
+      found_phone: client.phone || null,
+      found_url: client.website || null,
+      listing_url: client.gbp_maps_url || `https://www.google.com/maps/place/?q=place_id:${client.gbp_place_id}`,
+      notes: `Verified from CRM data (GBP place_id: ${client.gbp_place_id || 'n/a'}, rating: ${client.gbp_rating || 'n/a'}, ${client.gbp_review_count || 0} reviews)`,
+    };
+  }
+
+  // Facebook — if we have a facebook URL in the client record
+  if (client.facebook_url) {
+    known.facebook = {
+      status: 'found_correct',
+      name_match: true,
+      address_match: null,
+      phone_match: null,
+      url_match: null,
+      found_name: client.company_name,
+      found_address: null,
+      found_phone: null,
+      found_url: client.facebook_url,
+      listing_url: client.facebook_url,
+      notes: 'Verified from CRM data (Facebook URL on file)',
+    };
+  }
+
+  return known;
+}
+
 function getDirectories(client, settings) {
   const dirs = [...CORE_DIRECTORIES];
 
@@ -200,10 +242,18 @@ export async function POST(request) {
     .maybeSingle();
 
   const directories = getDirectories(client, settings);
-  const batchSize = 3; // Smaller batches since web search takes longer per directory
-  const totalSteps = Math.ceil(directories.length / batchSize);
 
-  // Step 0: create audit
+  // Pre-populate known listings from CRM data (skip web search for these)
+  const knownListings = buildKnownListings(client);
+
+  // Split directories into known (skip search) and unknown (need search)
+  const unknownDirs = directories.filter(d => !knownListings[d.key]);
+  const knownDirs = directories.filter(d => knownListings[d.key]);
+
+  const batchSize = 3;
+  const totalSteps = Math.ceil(unknownDirs.length / batchSize) + (knownDirs.length > 0 ? 1 : 0);
+
+  // Step 0: create audit + insert known listings immediately
   if (step === 0) {
     const { data: audit, error } = await supabase
       .from('citation_audits')
@@ -212,14 +262,66 @@ export async function POST(request) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ auditId: audit.id, totalSteps, totalDirectories: directories.length });
+
+    // Insert all known listings immediately (no web search needed)
+    for (const dir of knownDirs) {
+      const known = knownListings[dir.key];
+      await supabase.from('citations').insert({
+        audit_id: audit.id,
+        client_id: clientId,
+        directory: dir.key,
+        directory_label: dir.label,
+        category: dir.category,
+        status: known.status,
+        name_match: known.name_match,
+        address_match: known.address_match,
+        phone_match: known.phone_match,
+        url_match: known.url_match,
+        found_name: known.found_name,
+        found_address: known.found_address,
+        found_phone: known.found_phone,
+        found_url: known.found_url,
+        listing_url: known.listing_url,
+        claim_url: dir.claimUrl || null,
+        notes: known.notes,
+      });
+    }
+
+    return NextResponse.json({ auditId: audit.id, totalSteps, totalDirectories: directories.length, knownCount: knownDirs.length });
   }
 
   if (!auditId) return NextResponse.json({ error: 'auditId required' }, { status: 400 });
 
-  // Run batch
-  const batchStart = (step - 1) * batchSize;
-  const batch = directories.slice(batchStart, batchStart + batchSize);
+  // Run batch (only unknown directories need web search)
+  const adjustedStep = knownDirs.length > 0 ? step - 1 : step; // Account for known listings step
+  const batchStart = (adjustedStep - 1) * batchSize;
+  const batch = unknownDirs.slice(batchStart, batchStart + batchSize);
+
+  // If batch is empty (all known), skip to completion
+  if (batch.length === 0) {
+    const done = true;
+    const { data: allCitations } = await supabase
+      .from('citations')
+      .select('status')
+      .eq('audit_id', auditId);
+
+    const total = allCitations?.length || 0;
+    const correct = allCitations?.filter(c => c.status === 'found_correct').length || 0;
+    const inconsistent = allCitations?.filter(c => c.status === 'found_inconsistent').length || 0;
+    const missing = allCitations?.filter(c => c.status === 'not_found').length || 0;
+    const score = total > 0 ? Math.round(((correct + inconsistent) / total) * 100) : 0;
+
+    await supabase.from('citation_audits').update({
+      status: 'complete',
+      total_found: correct + inconsistent,
+      total_correct: correct,
+      total_inconsistent: inconsistent,
+      total_missing: missing,
+      health_score: score,
+    }).eq('id', auditId);
+
+    return NextResponse.json({ step, done });
+  }
 
   const fullAddress = [client.address_street, client.address_city, client.address_state, client.address_zip].filter(Boolean).join(', ');
   const context = `Business NAP (correct info):
@@ -334,7 +436,7 @@ export async function POST(request) {
       });
     }
 
-    const done = step === totalSteps;
+    const done = batchStart + batch.length >= unknownDirs.length;
 
     // If done, calculate totals
     if (done) {
