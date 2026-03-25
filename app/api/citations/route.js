@@ -94,13 +94,14 @@ const INDUSTRY_DIRECTORIES = [
   { key: 'zillow', label: 'Zillow', category: 'industry', industries: ['real estate', 'realtor', 'property management', 'mortgage'] },
 ];
 
-function getDirectories(client) {
+function getDirectories(client, settings) {
   const dirs = [...CORE_DIRECTORIES];
 
-  // Build a search string from industry + services
-  const parts = [client.industry_type || ''];
-  if (Array.isArray(client.business_services)) {
-    parts.push(...client.business_services.map(s => s.label || s.name || String(s)));
+  // Build a search string from industry + services (from client_settings, not clients table)
+  const parts = [settings?.industry_type || ''];
+  const bsvc = settings?.business_services;
+  if (Array.isArray(bsvc)) {
+    parts.push(...bsvc.map(s => typeof s === 'string' ? s : s.label || s.name || String(s)));
   }
   const searchText = parts.join(' ').toLowerCase();
 
@@ -191,7 +192,14 @@ export async function POST(request) {
 
   if (clientErr || !client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-  const directories = getDirectories(client);
+  // Get settings for industry_type + business_services (needed for directory matching AND NAP context)
+  const { data: settings } = await supabase
+    .from('client_settings')
+    .select('industry_type, business_services')
+    .eq('client_id', clientId)
+    .maybeSingle();
+
+  const directories = getDirectories(client, settings);
   const batchSize = 3; // Smaller batches since web search takes longer per directory
   const totalSteps = Math.ceil(directories.length / batchSize);
 
@@ -213,13 +221,15 @@ export async function POST(request) {
   const batchStart = (step - 1) * batchSize;
   const batch = directories.slice(batchStart, batchStart + batchSize);
 
-  const fullAddress = [client.address, client.city, client.state, client.zip].filter(Boolean).join(', ');
+  const fullAddress = [client.address_street, client.address_city, client.address_state, client.address_zip].filter(Boolean).join(', ');
   const context = `Business NAP (correct info):
 - Name: ${client.company_name}
 - Address: ${fullAddress || 'not provided'}
+- City: ${client.address_city || 'not provided'}
+- State: ${client.address_state || 'not provided'}
 - Phone: ${client.phone || 'not provided'}
 - Website: ${client.website || 'not provided'}
-- Industry: ${client.industry_type || 'not provided'}`;
+- Industry: ${settings?.industry_type || 'not provided'}`;
 
   const dirList = batch.map(d => `- ${d.key} (${d.label}) [${d.category}]`).join('\n');
 
@@ -351,8 +361,10 @@ export async function POST(request) {
 
     return NextResponse.json({ step, done });
   } catch (err) {
-    console.error('Citation audit step failed:', err);
-    await supabase.from('citation_audits').update({ status: 'error' }).eq('id', auditId);
-    return NextResponse.json({ error: 'Step failed' }, { status: 500 });
+    console.error('Citation audit step failed:', err.message, err.stack);
+    if (auditId) {
+      await supabase.from('citation_audits').update({ status: 'error' }).eq('id', auditId);
+    }
+    return NextResponse.json({ error: `Step ${step} failed: ${err.message}` }, { status: 500 });
   }
 }
