@@ -22,27 +22,94 @@ const CORE_DIRECTORIES = [
   { key: 'thumbtack', label: 'Thumbtack', category: 'core' },
 ];
 
+// Home services keyword list (shared across many directories)
+const HOME_SVC = ['home services', 'plumbing', 'hvac', 'electrical', 'roofing', 'landscaping', 'construction', 'contractor', 'handyman', 'cleaning', 'tree service', 'tree removal', 'tree care', 'lawn', 'pest control', 'painting', 'fencing', 'moving', 'junk removal', 'junk hauling', 'hauling', 'dumpster', 'dumpster rental', 'demolition', 'paving', 'asphalt', 'concrete', 'sealcoating', 'pressure washing', 'power washing', 'gutter', 'siding', 'window', 'garage door', 'flooring', 'remodeling', 'renovation'];
+
 const INDUSTRY_DIRECTORIES = [
-  { key: 'angi', label: 'Angi', category: 'industry', industries: ['home services', 'plumbing', 'hvac', 'electrical', 'roofing', 'landscaping', 'construction', 'contractor', 'handyman', 'cleaning', 'tree service', 'tree removal', 'tree care', 'lawn', 'pest control', 'painting', 'fencing', 'moving', 'junk removal', 'hauling'] },
-  { key: 'homeadvisor', label: 'HomeAdvisor', category: 'industry', industries: ['home services', 'plumbing', 'hvac', 'electrical', 'roofing', 'landscaping', 'construction', 'contractor', 'handyman', 'tree service', 'tree removal', 'lawn', 'pest control', 'painting', 'fencing', 'junk removal', 'hauling'] },
-  { key: 'houzz', label: 'Houzz', category: 'industry', industries: ['home services', 'interior design', 'construction', 'remodeling', 'landscaping', 'architecture'] },
-  { key: 'porch', label: 'Porch', category: 'industry', industries: ['home services', 'plumbing', 'hvac', 'electrical', 'roofing', 'construction', 'contractor', 'tree service'] },
+  // === HOME SERVICES (your core clients) ===
+  { key: 'angi', label: 'Angi', category: 'industry', industries: HOME_SVC },
+  { key: 'homeadvisor', label: 'HomeAdvisor', category: 'industry', industries: HOME_SVC },
+  { key: 'houzz', label: 'Houzz', category: 'industry', industries: [...HOME_SVC, 'interior design', 'architecture'] },
+  { key: 'porch', label: 'Porch', category: 'industry', industries: HOME_SVC },
+  { key: 'bark', label: 'Bark', category: 'industry', industries: HOME_SVC },
+  { key: 'taskrabbit', label: 'TaskRabbit', category: 'industry', industries: ['handyman', 'moving', 'cleaning', 'junk removal', 'junk hauling', 'hauling', 'home services', 'furniture assembly'] },
+  { key: 'networx', label: 'Networx', category: 'industry', industries: HOME_SVC },
+  { key: 'buildzoom', label: 'BuildZoom', category: 'industry', industries: ['construction', 'contractor', 'remodeling', 'renovation', 'roofing', 'fencing', 'paving', 'concrete', 'demolition'] },
+  { key: 'homeservices_com', label: 'HomeServices.com', category: 'industry', industries: HOME_SVC },
+
+  // === DUMPSTER / JUNK / HAULING / MOVING ===
+  { key: 'hometown_dumpster', label: 'Hometown Dumpster Rental', category: 'industry', industries: ['dumpster', 'dumpster rental', 'junk removal', 'junk hauling', 'hauling', 'demolition'] },
+  { key: 'dumpsters_com', label: 'Dumpsters.com', category: 'industry', industries: ['dumpster', 'dumpster rental', 'junk removal', 'demolition'] },
+  { key: 'junk_king', label: 'Junk King (franchise check)', category: 'industry', industries: ['junk removal', 'junk hauling', 'hauling'] },
+  { key: 'moving_com', label: 'Moving.com', category: 'industry', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
+  { key: 'uhaul_marketplace', label: 'U-Haul Moving Help', category: 'industry', industries: ['moving', 'moving company', 'hauling'] },
+  { key: 'hire_a_helper', label: 'HireAHelper', category: 'industry', industries: ['moving', 'moving company', 'hauling', 'junk removal'] },
+  { key: 'unpakt', label: 'Unpakt', category: 'industry', industries: ['moving', 'moving company'] },
+  { key: 'movingauthority', label: 'Moving Authority (FMCSA)', category: 'industry', industries: ['moving', 'moving company'] },
+
+  // === ROOFING / PAVING / FENCING / HVAC ===
+  { key: 'gaf_roofer', label: 'GAF Roofer Directory', category: 'industry', industries: ['roofing'] },
+  { key: 'owens_corning', label: 'Owens Corning Contractor', category: 'industry', industries: ['roofing'] },
+  { key: 'certainteed', label: 'CertainTeed Contractor', category: 'industry', industries: ['roofing', 'siding', 'fencing'] },
+  { key: 'nrca', label: 'NRCA Member Directory', category: 'industry', industries: ['roofing'] },
+  { key: 'hvac_com', label: 'HVAC.com', category: 'industry', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
+  { key: 'carrier', label: 'Carrier Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling', 'air conditioning'] },
+  { key: 'trane', label: 'Trane Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling'] },
+  { key: 'lennox', label: 'Lennox Dealer Locator', category: 'industry', industries: ['hvac', 'heating', 'cooling'] },
+  { key: 'expertise_com', label: 'Expertise.com', category: 'industry', industries: HOME_SVC },
+  { key: 'concrete_network', label: 'ConcreteNetwork.com', category: 'industry', industries: ['concrete', 'paving', 'asphalt', 'sealcoating', 'driveway'] },
+
+  // === GENERAL SERVICE DIRECTORIES ===
+  { key: 'bni', label: 'BNI Member Directory', category: 'industry', industries: HOME_SVC },
+  { key: 'alignable', label: 'Alignable', category: 'industry', industries: HOME_SVC },
+  { key: 'local_com', label: 'Local.com', category: 'industry', industries: HOME_SVC },
+  { key: 'chamberofcommerce', label: 'ChamberOfCommerce.com', category: 'industry', industries: HOME_SVC },
+  { key: 'merchantcircle', label: 'MerchantCircle', category: 'industry', industries: HOME_SVC },
+  { key: 'brownbook', label: 'Brownbook', category: 'industry', industries: HOME_SVC },
+  { key: 'cylex', label: 'Cylex', category: 'industry', industries: HOME_SVC },
+  { key: 'ezlocal', label: 'EZlocal', category: 'industry', industries: HOME_SVC },
+  { key: 'showmelocal', label: 'ShowMeLocal', category: 'industry', industries: HOME_SVC },
+
+  // === DATA AGGREGATORS (feed dozens of smaller directories) ===
+  { key: 'data_axle', label: 'Data Axle (Infogroup)', category: 'industry', industries: HOME_SVC },
+  { key: 'neustar_localeze', label: 'Neustar Localeze', category: 'industry', industries: HOME_SVC },
+  { key: 'factual', label: 'Factual (Foursquare Data)', category: 'industry', industries: HOME_SVC },
+
+  // === MEDICAL (kept for flexibility) ===
   { key: 'healthgrades', label: 'Healthgrades', category: 'industry', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'hospital', 'optometry', 'chiropractic'] },
   { key: 'zocdoc', label: 'Zocdoc', category: 'industry', industries: ['medical', 'healthcare', 'dental', 'dentist', 'doctor', 'physician', 'clinic', 'therapy'] },
+
+  // === LEGAL ===
   { key: 'avvo', label: 'Avvo', category: 'industry', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
   { key: 'findlaw', label: 'FindLaw', category: 'industry', industries: ['legal', 'lawyer', 'attorney', 'law firm', 'law'] },
+
+  // === FOOD / HOSPITALITY ===
   { key: 'tripadvisor', label: 'TripAdvisor', category: 'industry', industries: ['restaurant', 'food', 'hospitality', 'hotel', 'travel', 'tourism', 'bar', 'cafe'] },
   { key: 'opentable', label: 'OpenTable', category: 'industry', industries: ['restaurant', 'food', 'dining', 'bar', 'cafe'] },
+
+  // === AUTOMOTIVE ===
   { key: 'carfax', label: 'Carfax', category: 'industry', industries: ['automotive', 'auto repair', 'car dealer', 'mechanic', 'auto body'] },
+
+  // === REAL ESTATE ===
   { key: 'zillow', label: 'Zillow', category: 'industry', industries: ['real estate', 'realtor', 'property management', 'mortgage'] },
 ];
 
-function getDirectories(industry) {
+function getDirectories(client) {
   const dirs = [...CORE_DIRECTORIES];
-  if (!industry) return dirs;
-  const norm = (industry || '').toLowerCase();
+
+  // Build a search string from industry + services
+  const parts = [client.industry_type || ''];
+  if (Array.isArray(client.business_services)) {
+    parts.push(...client.business_services.map(s => s.label || s.name || String(s)));
+  }
+  const searchText = parts.join(' ').toLowerCase();
+
+  if (!searchText.trim()) return dirs;
+
   for (const d of INDUSTRY_DIRECTORIES) {
-    if (d.industries.some(i => norm.includes(i) || i.includes(norm))) dirs.push(d);
+    if (d.industries.some(i => searchText.includes(i) || i.split(' ').every(w => searchText.includes(w)))) {
+      dirs.push(d);
+    }
   }
   return dirs;
 }
@@ -121,7 +188,7 @@ export async function POST(request) {
 
   if (clientErr || !client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-  const directories = getDirectories(client.industry_type);
+  const directories = getDirectories(client);
   const batchSize = 5;
   const totalSteps = Math.ceil(directories.length / batchSize);
 
