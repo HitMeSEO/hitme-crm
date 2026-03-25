@@ -133,6 +133,38 @@
 - Bulk schema push across all client pages with progress feedback
 - Image attachment workflow — pick unique image per page before schema push
 
+## DONE 2026-03-25 (Claude Code Session: Citation Health Feature)
+- ✅ Citation Health tab built: NAP consistency auditing across 40+ directories
+- ✅ 14 core directories (Google, Yelp, BBB, Apple Maps, Facebook, Bing Places, etc.)
+- ✅ 30+ industry-specific directories (Angi, HomeAdvisor, Porch, GAF, Carrier, Dumpsters.com, Moving.com, etc.)
+- ✅ Data aggregators included (Data Axle, Neustar Localeze, Factual)
+- ✅ Manufacturer directories (GAF, Owens Corning, CertainTeed, Carrier, Trane, Lennox)
+- ✅ Claim/Fix action buttons with direct URLs to each directory's signup/claim page
+- ✅ Tracking workflow: Not Listed → Submitted → Claimed → Verified dropdown per citation
+- ✅ Citation Building Progress card with counts per tracking status
+- ✅ Health score (0-100) with color-coded bar
+- ✅ Filter by: All, Correct, Issues, Missing
+- ✅ Supabase tables: citation_audits + citations (with RLS)
+- ✅ API route: /api/citations (GET latest audit, POST multi-step audit)
+- ✅ /last30days research skill installed for team research
+
+## Upcoming — Feature 2: Bulk Location Content Generation
+- Pam has location page generator files in Google Drive: https://drive.google.com/drive/folders/1L39a3nPjwbviHbcJpw0Mb1onKPfpjC-B?usp=sharing
+- Generate unique SEO-optimized service landing pages for each client's ~20 service locations
+- Must follow client's brandVoice and existing content style
+- Uses targetCities + targetKeywords + primaryServices from client data
+- Store with status workflow: DRAFT → APPROVED → PUBLISHED
+
+## Upcoming — Feature 3: Weekly Rank Tracking
+- Track keyword rankings weekly per client
+- Historical rank data with trends
+- Feed into monthly reports
+
+## Upcoming — Feature 4: Automated Review Response Drafting
+- Nightly cron to AI-draft responses for all NEW reviews
+- Configurable per client: auto-approve positive (4-5 star) vs hold all for review
+- Uses existing review management workflow
+
 ## Phase 3: Site Link Audit (crawl client website)
 - Extend audit route to GET page HTML instead of just HEAD
 - Parse all <a href> tags from each page

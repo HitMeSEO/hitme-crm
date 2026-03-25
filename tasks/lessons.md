@@ -125,6 +125,18 @@
 - [2026-03-23] Cowork: Chrome extension (Claude in Chrome) disconnects frequently during Cowork sessions. Use Control Chrome MCP as fallback, or just describe where to navigate.
 - [2026-03-23] Cowork: Client image management is next priority — Pam wants to pull images from client document folders, track usage (website vs GBP), and prevent reuse. This is a future build item.
 
+## 2026-03-25 Claude Code Session: Citation Health + /last30days Research
+- [2026-03-25] Claude Code: TWO REPOS EXIST — `HitMeSEO/hitme-crm` is PRODUCTION (Supabase direct, JS, no Prisma). `HitMeSEO/hitme-platform` is OLD/deprecated (Prisma, TypeScript). Built entire citation feature in WRONG repo first, had to rebuild. ALWAYS work in hitme-crm.
+- [2026-03-25] Claude Code: hitme-crm deploys via git push to main (Vercel auto-deploys from GitHub). hitme-platform deploys via `npx vercel --prod` to a DIFFERENT Vercel project. Production URL is hitme-crm-app.vercel.app.
+- [2026-03-25] Claude Code: Local build fails without Supabase env vars (`supabaseUrl is required`). Build works on Vercel because env vars are set there. For local builds, need .env.local with real NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY.
+- [2026-03-25] Claude Code: SQL migrations must be pasted directly into Supabase SQL Editor — don't reference file paths. Tim pastes what you give him literally.
+- [2026-03-25] Claude Code: /last30days skill installed at ~/.claude/skills/last30days. API keys in ~/.config/last30days/.env (AUTH_TOKEN, CT0 for X/Twitter, SCRAPECREATORS_API_KEY for Reddit). Research saves to ~/Documents/Last30Days/.
+- [2026-03-25] Claude Code: Client detail page now has 13 tabs (Citations added between SEO Audit and Wiki).
+- [2026-03-25] Claude Code: Citation audit uses Claude AI assessment (not live web scraping) — same pattern as SEO audit. Practical and fast, but results are estimations.
+- [2026-03-25] Claude Code: Client industry matching for directories now checks `business_services` JSONB array + `industry_type` string. Important because many clients have services that don't match their top-level industry.
+- [2026-03-25] Claude Code: Tracking workflow uses direct Supabase client-side updates (no API route needed for simple status changes). createClient() from @/lib/supabase/client works for authenticated users.
+- [2026-03-25] Claude Code: Tim's clients are primarily: home services, dumpster rental, junk hauling, moving, paving, roofing, fencing, HVAC. Directory list was expanded from 12 to 40+ to cover these industries.
+
 ## 2026-03-23 Cowork Session 4: Images Tab + Google Drive Integration
 - [2026-03-23] Cowork: Built Images tab — full gallery UI with usage tracking (website, gbp, social, blog), filter bar, stats bar, mark-as-used/clear-usage actions, open-in-Drive links.
 - [2026-03-23] Cowork: Images API route (`/api/clients/[id]/images`) uses Google Drive API to list image files from a client's `image_folder` URL. Merges with `image_assets` Supabase table for usage tracking.
