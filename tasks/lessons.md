@@ -146,3 +146,10 @@
 - [2026-03-23] Cowork: Some clients use Dropbox for image folders, not Google Drive. Added detection — if URL contains `dropbox.com`, shows "Dropbox integration coming soon" message instead of a confusing parse error.
 - [2026-03-23] Cowork: Image Folder field already exists in client edit form (under Folder Links). Clients need a Google Drive folder URL there for the Images tab to work.
 - [2026-03-23] Cowork: Don't ask Tim to re-authorize Google if he already did it. Check with him first instead of assuming it hasn't been done.
+
+## 2026-03-25 Bulk Location Content Engine
+- [LESSON] Pam's standalone Location Page Generator was cleaning-service only with manual copy-paste workflow. Building bulk generation INTO the CRM eliminates the manual process and works for all industries.
+- [LESSON] The activities/summarize route had a build-time error because it created Supabase client at module level (outside handler). Always create API clients inside the handler function.
+- [LESSON] For bulk operations exceeding Vercel's 300s timeout, use client-side orchestration with chunked API calls. Process 8-10 locations per request for generation, 3-4 for research.
+- [LESSON] The variation system (opening style rotation, service order shuffle, FAQ rotation, previous-page anti-duplication snippets) is critical for uniqueness across 20+ location pages.
+- [LESSON] 5-gram overlap detection (from Pam's tool) is a solid uniqueness metric. Score of 100 = no overlap, <70 = flagged for review.

@@ -174,3 +174,14 @@
 - Feed crawl data into content generator so new pages auto-include correct internal links
 - Store results in client_audits as link_audit_results JSONB
 - Show in AI Readiness Dashboard as "Link Health" metric
+
+## DONE 2026-03-25
+- ✅ Citation Audit feature: tracking_status workflow (Not Listed → Submitted → Claimed → Verified), 70+ industry-specific directories for home services
+- ✅ Bulk Location Content Engine: bulk-generate API, uniqueness-check API, variation system, BulkGenerateModal in LocationsTab, quality score badges in ContentTab
+- ✅ Fixed activities/summarize build error
+
+## TODO
+- [ ] Test bulk generation with a client that has 3-4 locations before running full 20
+- [ ] Add content_restrictions field to client settings edit form so Pam can set per-client restrictions
+- [ ] Consider refactoring generate/route.js to import WRITING_RULES and buildServicePagePrompt from lib/content-engine.js (currently duplicated)
+- [ ] Review automation (Feature 4 from original plan)
