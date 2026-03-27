@@ -1,5 +1,6 @@
 import './globals.css';
 import { ThemeProvider } from '@/lib/theme';
+import BugReportButton from '@/components/BugReportButton';
 
 export const metadata = {
   title: 'Hit Me SEO CRM',
@@ -25,6 +26,7 @@ export default function RootLayout({ children }) {
       <body>
         <ThemeProvider>
           {children}
+          <BugReportButton />
         </ThemeProvider>
       </body>
     </html>
