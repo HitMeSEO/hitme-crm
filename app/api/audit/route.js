@@ -211,17 +211,145 @@ export async function POST(request) {
       : 0;
 
     // ═══════════════════════════════════════════
+    // 5. GBP-WEBSITE ALIGNMENT CHECK
+    // ═══════════════════════════════════════════
+    // Compares GBP data (categories, services, hours, description)
+    // against what the website actually shows.
+    // Mismatches hurt local rankings.
+    const alignmentIssues = [];
+    let alignmentScore = 100; // Start perfect, deduct for issues
+
+    // Check if GBP data exists at all
+    const hasGbpData = client.gbp_place_id || client.gbp_categories;
+
+    if (!hasGbpData) {
+      alignmentIssues.push({
+        type: 'missing_gbp_data',
+        severity: 'high',
+        message: 'No GBP data connected — cannot verify alignment. Connect GBP in the GBP Health tab.',
+      });
+      alignmentScore = 0;
+    } else {
+      // Check: GBP categories vs client services
+      const gbpCategories = (client.gbp_categories || []).map(c =>
+        (typeof c === 'string' ? c : c.name || c.displayName || '').toLowerCase()
+      );
+      const clientServiceLower = services.map(s => s.toLowerCase());
+
+      if (gbpCategories.length === 0) {
+        alignmentIssues.push({
+          type: 'no_gbp_categories',
+          severity: 'medium',
+          message: 'GBP categories not loaded. Re-fetch GBP data to check alignment.',
+        });
+        alignmentScore -= 15;
+      } else {
+        // Find services not reflected in GBP categories
+        const unmatchedServices = clientServiceLower.filter(svc =>
+          !gbpCategories.some(cat => cat.includes(svc) || svc.includes(cat))
+        );
+        if (unmatchedServices.length > 0) {
+          alignmentIssues.push({
+            type: 'services_not_in_gbp',
+            severity: 'medium',
+            message: `Services not reflected in GBP categories: ${unmatchedServices.join(', ')}`,
+            details: { unmatched: unmatchedServices, gbp_categories: gbpCategories },
+          });
+          alignmentScore -= Math.min(20, unmatchedServices.length * 5);
+        }
+      }
+
+      // Check: GBP description/editorial summary exists
+      if (!client.gbp_editorial_summary) {
+        alignmentIssues.push({
+          type: 'no_gbp_description',
+          severity: 'low',
+          message: 'No GBP editorial summary. Add a business description in Google Business Profile.',
+        });
+        alignmentScore -= 10;
+      }
+
+      // Check: GBP hours exist
+      if (!client.gbp_hours || (Array.isArray(client.gbp_hours) && client.gbp_hours.length === 0)) {
+        alignmentIssues.push({
+          type: 'no_gbp_hours',
+          severity: 'medium',
+          message: 'No business hours set in GBP. Hours help with "open now" searches.',
+        });
+        alignmentScore -= 10;
+      }
+
+      // Check: GBP post freshness (from gbp_last_post_date)
+      if (client.gbp_last_post_date) {
+        const lastPost = new Date(client.gbp_last_post_date);
+        const daysSincePost = Math.floor((now - lastPost) / (1000 * 60 * 60 * 24));
+        if (daysSincePost > 30) {
+          alignmentIssues.push({
+            type: 'stale_gbp_posts',
+            severity: 'high',
+            message: `Last GBP post was ${daysSincePost} days ago. Google rewards active profiles — post at least weekly.`,
+          });
+          alignmentScore -= 20;
+        } else if (daysSincePost > 14) {
+          alignmentIssues.push({
+            type: 'aging_gbp_posts',
+            severity: 'medium',
+            message: `Last GBP post was ${daysSincePost} days ago. Keep up the pace — weekly is ideal.`,
+          });
+          alignmentScore -= 10;
+        }
+      } else {
+        alignmentIssues.push({
+          type: 'no_post_history',
+          severity: 'medium',
+          message: 'No GBP post history tracked. Update the Post Tracker in GBP Health tab.',
+        });
+        alignmentScore -= 15;
+      }
+
+      // Check: Website URL matches GBP
+      if (client.website && client.gbp_maps_url) {
+        // At minimum, GBP should exist and website should be set
+        // We can't deep-check the GBP website field from here, but we flag if no website
+        if (!client.website.startsWith('http')) {
+          alignmentIssues.push({
+            type: 'invalid_website_url',
+            severity: 'medium',
+            message: `Website URL "${client.website}" may not be valid. Ensure it matches the URL in your GBP profile.`,
+          });
+          alignmentScore -= 10;
+        }
+      }
+
+      // Check: Review count health
+      if (client.gbp_review_count && client.gbp_review_count < 10) {
+        alignmentIssues.push({
+          type: 'low_review_count',
+          severity: 'medium',
+          message: `Only ${client.gbp_review_count} GBP reviews. Competitors with 50+ reviews rank higher in the Local Pack.`,
+        });
+        alignmentScore -= 10;
+      }
+    }
+
+    // Clamp score
+    alignmentScore = Math.max(0, Math.min(100, alignmentScore));
+
+    const gbpAlignmentCoverage = alignmentScore;
+
+    // ═══════════════════════════════════════════
     // CALCULATE OVERALL SCORE
     // ═══════════════════════════════════════════
     const geoRadarScore = latestRadar?.visibility_score || 0;
 
-    // Weighted composite: content 30%, AI visibility 30%, schema 15%, GBP 15%, FAQ 10%
+    // Weighted composite: content 25%, AI visibility 25%, schema 15%, GBP activity 10%, FAQ 10%, GBP alignment 15%
     const aiReadinessScore = Math.round(
-      contentCoverage * 0.30 +
-      geoRadarScore * 0.30 +
+      contentCoverage * 0.25 +
+      geoRadarScore * 0.25 +
       schemaCoverage * 0.15 +
-      gbpActivity * 0.15 +
-      faqCoverage * 0.10
+      gbpActivity * 0.10 +
+      faqCoverage * 0.10 +
+      gbpAlignmentCoverage * 0.15
     );
 
     // ═══════════════════════════════════════════
@@ -259,6 +387,12 @@ export async function POST(request) {
         total_questions: relevantQuestions.length,
         unanswered: unansweredQuestions.slice(0, 30),
       },
+      gbp_alignment_results: {
+        alignment_pct: gbpAlignmentCoverage,
+        has_gbp_data: !!hasGbpData,
+        issues_count: alignmentIssues.length,
+        issues: alignmentIssues,
+      },
       geo_radar_scan_id: latestRadar?.id || null,
     };
 
@@ -281,6 +415,7 @@ export async function POST(request) {
       schema: { coverage: schemaCoverage, gaps: schemaGaps.length },
       gbp: { activity: gbpActivity, stale: gbpGaps.length },
       faq: { coverage: faqCoverage, unanswered: unansweredQuestions.length },
+      gbp_alignment: { score: gbpAlignmentCoverage, issues: alignmentIssues.length },
       geo_radar: { score: geoRadarScore, has_scan: !!latestRadar },
     });
 

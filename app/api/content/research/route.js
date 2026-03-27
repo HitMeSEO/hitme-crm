@@ -237,7 +237,7 @@ async function claudeResearch(
     ? businessServices.join(', ')
     : `Unknown — visit ${client.website || 'the business website'} to determine what services this business offers before beginning research`;
 
-  const prompt = `You are an SEO research analyst preparing a keyword brief for a local service business.
+  const prompt = `You are an SEO research analyst preparing a keyword brief for a local service business. Your research will power content generation AND competitive intelligence.
 
 CLIENT: ${client.company_name}
 SERVICES: ${servicesLine}
@@ -270,6 +270,9 @@ EXTRACT FROM THE TOP-RANKING LOCAL PAGES:
 6. WORD COUNT: Approximate length of top-ranking pages
 7. TRUST SIGNALS: Years in business, review counts, certifications
 8. CONTENT GAPS: What top pages are MISSING that we can include
+9. AI OVERVIEW DATA: If Google shows an AI Overview (SGE) snippet for any query, capture the EXACT questions it answers and the sources it cites. These are high-priority content targets.
+10. COMPETITOR BRANDS: For each local competitor, capture their brand name, URL, GBP review count/rating if visible, and the specific services they promote on their pages. We use this to build comparison content.
+11. GEOGRAPHIC OPPORTUNITIES: Identify nearby cities, suburbs, and neighborhoods that top competitors are targeting on their pages but our client is NOT. These are expansion opportunities.
 
 Return JSON in this EXACT format:
 {
@@ -301,14 +304,34 @@ Return JSON in this EXACT format:
   "content_angle": "How our page differentiates",
   "pricing_keywords": ["pricing terms to address"],
   "services_to_feature": ["services to highlight based on data"],
-  "local_pack_competitors": ["businesses appearing in Maps 3-pack"]
+  "local_pack_competitors": ["businesses appearing in Maps 3-pack"],
+  "ai_overview_questions": ["questions answered by Google AI Overview if present — empty array if no AI Overview shown"],
+  "ai_overview_sources": ["URLs cited in AI Overview if present"],
+  "competitor_brands": [
+    {
+      "name": "competitor business name",
+      "url": "their website URL",
+      "services_promoted": ["services they highlight"],
+      "review_rating": 4.5,
+      "review_count": 123,
+      "differentiator": "what they emphasize (speed, price, years, etc.)"
+    }
+  ],
+  "geographic_opportunities": {
+    "nearby_cities_targeted_by_competitors": ["cities/towns competitors target that our client does not"],
+    "neighborhoods_mentioned": ["specific neighborhoods referenced across competitor pages"],
+    "service_area_gaps": ["areas where no competitor has strong content"]
+  }
 }
 
 RULES:
 - ONLY include REAL data from actual search results
 - Do NOT invent neighborhoods, landmarks, or local facts
 - Note which businesses appear in the Local Pack
-- Focus on LOCAL competitors over national brands`;
+- Focus on LOCAL competitors over national brands
+- For competitor_brands, include at LEAST the top 3 local competitors you find
+- For ai_overview_questions, only include if Google actually shows an AI Overview — do not fabricate
+- For geographic_opportunities, compare what competitors target vs what our client's existing pages cover`;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

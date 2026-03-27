@@ -106,11 +106,92 @@ Return this exact JSON structure:
 }
 
 // ============================================================
+// PROMPT: COMPETITOR COMPARISON PAGE
+// ============================================================
+function buildCompetitorComparisonPrompt(client, location, settings, brief, competitorName) {
+  const city = location.address_city || client.address_city || '';
+  const state = location.address_state || client.address_state || '';
+  const phone = client.phone || '';
+  const website = client.website || '';
+  const keyword = brief.primary_keyword || `${(settings?.business_services || ['services'])[0]} ${city}`;
+
+  // Pull competitor data from brief if available
+  const competitorBrands = brief.competitor_brands || [];
+  const matchedCompetitor = competitorBrands.find(c =>
+    c.name && competitorName && c.name.toLowerCase().includes(competitorName.toLowerCase())
+  );
+
+  const competitorContext = matchedCompetitor
+    ? `Competitor URL: ${matchedCompetitor.url || 'Unknown'}
+Competitor Services: ${(matchedCompetitor.services_promoted || []).join(', ') || 'Unknown'}
+Competitor Rating: ${matchedCompetitor.review_rating || 'Unknown'} (${matchedCompetitor.review_count || '?'} reviews)
+Competitor Differentiator: ${matchedCompetitor.differentiator || 'Unknown'}`
+    : 'No detailed competitor data available — research the competitor during content generation.';
+
+  const clientServices = (settings?.business_services || []).join(', ');
+  const trustSignals = settings?.trust_signals || '';
+
+  return `You are an expert SEO content writer creating a competitor comparison page for a local service business.
+
+This is a "${client.company_name} vs ${competitorName}" page designed to capture brand-search traffic when people search for the competitor by name.
+
+Return ONLY a valid JSON object — no markdown, no preamble, nothing outside the JSON.
+
+=== CLIENT (the business we're promoting) ===
+Company: ${client.company_name}
+Website: ${website}
+Phone: ${phone}
+City: ${city}, ${state}
+Services: ${clientServices}
+Trust signals: ${trustSignals}
+GBP Rating: ${client.gbp_rating || 'N/A'} (${client.gbp_review_count || '?'} reviews)
+${settings?.brand_voice_notes ? `Brand voice: ${settings.brand_voice_notes}` : ''}
+
+=== COMPETITOR ===
+Competitor Name: ${competitorName}
+${competitorContext}
+
+=== KEYWORD BRIEF CONTEXT ===
+Primary Service Keyword: ${keyword}
+Local Details: ${JSON.stringify(brief.local_details || {})}
+
+=== COMPARISON PAGE RULES ===
+1. Title tag format: "${client.company_name} vs ${competitorName} | ${city} ${(settings?.business_services || ['Services'])[0]}" (max 60 chars)
+2. H1: "${client.company_name} vs ${competitorName}: ${city} ${(settings?.business_services || ['Services'])[0]} Compared"
+3. Be FAIR and FACTUAL — do NOT trash the competitor. This is a professional comparison, not an attack.
+4. Structure:
+   - Opening paragraph: Acknowledge both businesses serve ${city}, explain what this page covers
+   - H2: "Services Comparison" — side-by-side breakdown of what each offers
+   - H2: "Service Area Coverage" — where each operates, which neighborhoods/cities
+   - H2: "Customer Reviews & Reputation" — compare review counts, ratings, what customers say (use real data if available)
+   - H2: "Why ${city} Homeowners Choose ${client.company_name}" — this is where we highlight our client's advantages
+   - FAQ section: 3-4 questions like "Is ${client.company_name} better than ${competitorName}?" with balanced answers
+5. Include local details: neighborhoods, landmarks, zip codes from the brief
+6. Naturally include the competitor name 8-12 times (for brand search capture)
+7. Naturally include our client name 6-8 times
+8. Target 800-1000 words
+9. End with a CTA including phone number: ${phone}
+10. URL slug format: "${client.company_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${competitorName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}"
+11. Meta description: mention both companies, the city, and a CTA (max 160 chars)
+12. Output valid HTML using only: p, h2, h3, h4, div, ul, li, strong, em, a tags
+${WRITING_RULES}
+
+Return this exact JSON structure:
+{
+  "title_tag": "...",
+  "meta_description": "...",
+  "h1": "...",
+  "url_slug": "...",
+  "body_html": "..."
+}`;
+}
+
+// ============================================================
 // MAIN ROUTE HANDLER
 // ============================================================
 export async function POST(request) {
   try {
-    const { clientId, locationId, page_type = 'service_location_page', target_service, link_url, editedBrief } = await request.json();
+    const { clientId, locationId, page_type = 'service_location_page', target_service, link_url, editedBrief, competitor_name } = await request.json();
 
     if (!clientId || !locationId) {
       return Response.json({ error: 'clientId and locationId are required' }, { status: 400 });
@@ -166,6 +247,13 @@ export async function POST(request) {
       prompt = buildBlogPostPrompt(client, location, settings, brief, target_service);
       maxTokens = 10000;
       dbContentType = 'Blog Post';
+    } else if (page_type === 'competitor_comparison') {
+      if (!competitor_name) {
+        return Response.json({ error: 'competitor_name is required for competitor comparison pages' }, { status: 400 });
+      }
+      prompt = buildCompetitorComparisonPrompt(client, location, settings, brief, competitor_name);
+      maxTokens = 10000;
+      dbContentType = 'Competitor Comparison';
     } else {
       prompt = buildServicePagePrompt(client, location, settings, brief, target_service);
       maxTokens = 12000;
