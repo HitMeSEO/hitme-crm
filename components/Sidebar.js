@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/theme';
 import {
   LayoutDashboard, Users, CheckSquare, FileText, Activity,
+  Calendar,
   Sun, Moon, LogOut, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/content', label: 'Content', icon: FileText },
   { href: '/activity', label: 'Activity', icon: Activity },
+  { href: '/calendar', label: 'Calendar', icon: Calendar },
 ];
 
 export default function Sidebar() {
